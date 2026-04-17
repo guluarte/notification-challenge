@@ -1,0 +1,12 @@
+"""Health-check routes used during project setup."""
+
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/health", tags=["health"])
+
+
+@router.get("", summary="Health check")
+def read_health() -> dict[str, str]:
+    """Return the current service status."""
+
+    return {"status": "ok"}

@@ -1,0 +1,17 @@
+.codex/
+.DS_Store
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.venv/
+
+backend/.venv/
+backend/.env*
+!backend/.env.example
+
+frontend/node_modules/
+frontend/dist/
+frontend/.env*
+!frontend/.env.example
