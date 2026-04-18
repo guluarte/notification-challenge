@@ -30,9 +30,5 @@ typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
 
-[tool.pytest.ini_options]
-addopts = "-ra"
-testpaths = ["tests"]
-
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
