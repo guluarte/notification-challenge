@@ -1,18 +1,16 @@
-FROM node:20-bookworm-slim AS builder
+FROM node:24.14.1-bookworm-slim AS builder
 
 WORKDIR /app
 
-ARG NPM_VERSION=11.6.2
+RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
-RUN npm install -g npm@$NPM_VERSION
+COPY package.json pnpm-lock.yaml ./
 
-COPY package.json package-lock.json ./
-
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-RUN npm run build
+RUN pnpm run build
 
 FROM nginx:1.27-alpine AS runtime
 

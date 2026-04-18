@@ -157,8 +157,8 @@ erDiagram
 ## Prerequisites
 
 - Python `3.12+`
-- Node.js `20+`
-- `npm`
+- Node.js `24.14.1` LTS
+- `pnpm`
 - `uv`
 - Docker with the Compose plugin
 
@@ -245,7 +245,7 @@ GET http://localhost:8000/v1/health
 Expected response:
 
 ```json
-{"status":"ok"}
+{"status":"ok","database":"ok"}
 ```
 
 ### Frontend
@@ -254,13 +254,13 @@ Install dependencies:
 
 ```bash
 cd frontend
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 Start the development server:
 
 ```bash
-npm run dev
+pnpm dev
 ```
 
 The frontend runs at:
@@ -285,10 +285,11 @@ uv run ruff check app/core/config.py app/main.py app/api/v1/router.py app/api/v1
 
 ```bash
 cd frontend
-npm run typecheck
-npm run lint
-npm run format:check
-npm run build
+pnpm test
+pnpm typecheck
+pnpm lint
+pnpm format:check
+pnpm build
 ```
 
 ## Docker Notes
