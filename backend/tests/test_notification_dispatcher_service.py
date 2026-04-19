@@ -14,6 +14,8 @@ class RecordedAttempt:
     """Captured delivery repository updates for test assertions."""
 
     attempt_id: int
+    message_id: int
+    user_id: int
     channel_code: str
     status: str
     failure_reason: str | None = None
@@ -25,6 +27,7 @@ class FakeDeliveryRepository:
 
     def __init__(self) -> None:
         self.attempts: list[RecordedAttempt] = []
+        self.delivered_timestamps: dict[int, datetime] = {}
         self._next_id = 1
 
     def create_pending_attempt(
@@ -39,6 +42,8 @@ class FakeDeliveryRepository:
         self.attempts.append(
             RecordedAttempt(
                 attempt_id=attempt_id,
+                message_id=message.id,
+                user_id=subscriber.user_id,
                 channel_code=channel_code,
                 status="pending",
             )
@@ -52,7 +57,7 @@ class FakeDeliveryRepository:
         provider_reference: str | None,
         delivered_at: datetime,
     ) -> None:
-        del delivered_at
+        self.delivered_timestamps[attempt_id] = delivered_at
         attempt = self._find(attempt_id)
         attempt.status = "sent"
         attempt.provider_reference = provider_reference
@@ -145,17 +150,22 @@ def test_notification_dispatcher_isolates_channel_failures() -> None:
     assert repository.attempts == [
         RecordedAttempt(
             attempt_id=1,
+            message_id=10,
+            user_id=1,
             channel_code="email",
             status="sent",
             provider_reference="email-1",
         ),
         RecordedAttempt(
             attempt_id=2,
+            message_id=10,
+            user_id=1,
             channel_code="sms",
             status="failed",
             failure_reason="provider outage",
         ),
     ]
+    assert set(repository.delivered_timestamps) == {1}
 
 
 def test_notification_dispatcher_handles_missing_strategy_as_attempt_failure() -> None:
@@ -190,8 +200,11 @@ def test_notification_dispatcher_handles_missing_strategy_as_attempt_failure() -
     assert repository.attempts == [
         RecordedAttempt(
             attempt_id=1,
+            message_id=11,
+            user_id=4,
             channel_code="push",
             status="failed",
             failure_reason="missing strategy for push",
         )
     ]
+    assert repository.delivered_timestamps == {}

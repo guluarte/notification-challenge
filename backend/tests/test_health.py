@@ -28,7 +28,7 @@ class FakeSession:
 class FailingSession:
     """Minimal session double that raises a SQLAlchemy error on query."""
 
-    def scalar(self, statement: object) -> object:
+    def scalar(self, _statement: object) -> object:
         raise SQLAlchemyError("database unavailable")
 
 

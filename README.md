@@ -56,6 +56,8 @@ cp frontend/.env.example frontend/.env
 docker compose up --build
 ```
 
+That single command starts PostgreSQL, applies Alembic migrations, seeds deterministic demo data, and then starts the backend and frontend services.
+
 App URLs:
 
 - Frontend: `http://localhost:5173`
@@ -71,7 +73,7 @@ cd backend
 uv sync --group dev
 source .venv/bin/activate
 alembic upgrade head
-psql -h localhost -U postgres -d notifications -f db/seed.sql
+python -m app.seeders.run
 uvicorn app.main:app --reload
 ```
 
@@ -160,15 +162,6 @@ erDiagram
         TIMESTAMPTZ attempted_at
         TIMESTAMPTZ delivered_at
     }
-    seed_users {
-        INTEGER id PK
-        TEXT name
-        TEXT email UK
-        TEXT phone_number
-        JSONB categories
-        JSONB channels
-        TIMESTAMPTZ created_at
-    }
 
     notification_categories ||--o{ user_category_subscriptions : categorizes
     users ||--o{ user_category_subscriptions : subscribes
@@ -187,7 +180,7 @@ erDiagram
 
 `user_category_subscriptions` and `user_channel_preferences` stay normalized instead of being embedded on `users` as arrays. That keeps category targeting and channel selection independently queryable, indexable, and ready for future changes such as retries, reporting, and more granular preference rules.
 
-`seed_users` is only a bootstrap source used to load deterministic demo data into the normalized operational tables. Runtime reads and writes use `users`, `user_category_subscriptions`, and `user_channel_preferences`.
+The demo data is loaded by `python -m app.seeders.run`, which seeds the normalized operational tables directly. That keeps the runtime schema smaller while still giving local and Docker environments a deterministic, repeatable dataset.
 
 ## Tradeoffs and Future Scalability
 

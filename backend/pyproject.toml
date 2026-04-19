@@ -25,10 +25,17 @@ dev = [
 ]
 
 [tool.pyright]
-include = ["app"]
+include = ["app", "tests"]
 typeCheckingMode = "strict"
+reportUnusedClass = "error"
+reportUnusedFunction = "error"
+reportUnusedImport = "error"
+reportUnusedVariable = "error"
 venvPath = "."
 venv = ".venv"
+
+[tool.ruff.lint]
+extend-select = ["ARG"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
