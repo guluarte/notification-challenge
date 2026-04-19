@@ -216,7 +216,7 @@ def _synchronize_user_identity_sequence(session: Session) -> None:
         text(
             "SELECT setval("
             "pg_get_serial_sequence('users', 'id'), "
-            ":seeded_user_id, "
+            "COALESCE((SELECT MAX(id) FROM users), :seeded_user_id), "
             "true"
             ")"
         ),
