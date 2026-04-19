@@ -1,8 +1,11 @@
 """Application configuration loaded from environment variables."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -10,6 +13,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Notification API"
     app_env: str = "development"
+    log_level: str = "INFO"
     api_prefix: str = "/v1"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
@@ -20,7 +24,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BASE_DIR / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

@@ -3,10 +3,10 @@
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
-	"packageManager": "pnpm@10.28.0",
+	"packageManager": "pnpm@10.33.0",
 	"engines": {
-		"node": "24.14.1",
-		"pnpm": "10.28.0"
+		"node": "24.15.0",
+		"pnpm": "10.33.0"
 	},
 	"scripts": {
 		"dev": "vite --host 0.0.0.0 --port 5173",
@@ -19,19 +19,19 @@
 		"format:check": "biome check . --formatter-enabled=true --linter-enabled=false --assist-enabled=false"
 	},
 	"dependencies": {
-		"react": "^18.3.1",
-		"react-dom": "^18.3.1"
+		"react": "19.2.5",
+		"react-dom": "19.2.5"
 	},
 	"devDependencies": {
-		"@testing-library/jest-dom": "^6.9.1",
-		"@testing-library/react": "^16.3.0",
-		"@biomejs/biome": "^2.2.6",
-		"@types/react": "^18.3.12",
-		"@types/react-dom": "^18.3.1",
-		"@vitejs/plugin-react": "^6.0.1",
-		"jsdom": "^26.1.0",
-		"typescript": "^5.9.3",
-		"vite": "^8.0.8",
-		"vitest": "^3.2.4"
+		"@biomejs/biome": "2.4.12",
+		"@testing-library/jest-dom": "6.9.1",
+		"@testing-library/react": "16.3.2",
+		"@types/react": "19.2.14",
+		"@types/react-dom": "19.2.3",
+		"@vitejs/plugin-react": "6.0.1",
+		"jsdom": "29.0.2",
+		"typescript": "6.0.3",
+		"vite": "8.0.8",
+		"vitest": "4.1.4"
 	}
 }

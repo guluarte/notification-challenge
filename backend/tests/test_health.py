@@ -4,10 +4,12 @@ from typing import cast
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes.health import read_health
 from app.core.db import database_is_healthy
+from app.main import create_app
 from app.schemas.dtos import HealthResponseDTO, HealthState
 
 
@@ -23,6 +25,13 @@ class FakeSession:
         return self.scalar_result
 
 
+class FailingSession:
+    """Minimal session double that raises a SQLAlchemy error on query."""
+
+    def scalar(self, statement: object) -> object:
+        raise SQLAlchemyError("database unavailable")
+
+
 def test_database_is_healthy_runs_a_select_one_probe() -> None:
     """The DB probe should execute a trivial query through the shared session."""
 
@@ -32,6 +41,12 @@ def test_database_is_healthy_runs_a_select_one_probe() -> None:
 
     assert fake_session.last_statement is not None
     assert str(fake_session.last_statement) == "SELECT 1"
+
+
+def test_database_is_healthy_returns_false_on_sqlalchemy_errors() -> None:
+    """The DB probe should convert SQLAlchemy failures into an unhealthy result."""
+
+    assert database_is_healthy(cast(Session, FailingSession())) is False
 
 
 def test_read_health_returns_ok_when_database_check_succeeds() -> None:
@@ -62,3 +77,11 @@ def test_read_health_returns_503_when_database_check_fails() -> None:
             assert exc.detail == "Database unavailable."
         else:
             raise AssertionError("Expected the health route to raise HTTPException")
+
+
+def test_health_route_is_served_under_the_versioned_api_prefix() -> None:
+    """The health endpoint should be mounted under the configured API prefix."""
+
+    app = create_app()
+
+    assert app.url_path_for("read_health") == "/v1/health"

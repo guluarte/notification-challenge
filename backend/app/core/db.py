@@ -1,11 +1,15 @@
 """Reusable database engine, session factory, and health-check helpers."""
 
+import logging
+
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 engine: Engine = create_engine(
     settings.database_url,
@@ -27,4 +31,5 @@ def database_is_healthy(session: Session) -> bool:
     try:
         return session.scalar(select(1)) == 1
     except SQLAlchemyError:
+        logger.exception("Database health probe failed")
         return False
