@@ -4,9 +4,11 @@ import asyncio
 import logging
 from unittest.mock import patch
 
+from fastapi.exceptions import RequestValidationError
 from fastapi import FastAPI
 from uvicorn.logging import DefaultFormatter
 
+from app.core.exceptions import ApplicationError
 from app.core.config import BASE_DIR, Settings
 from app.main import create_app
 
@@ -60,3 +62,13 @@ def test_settings_load_env_file_from_backend_directory() -> None:
     """Settings should resolve the env file relative to the backend directory."""
 
     assert Settings.model_config.get("env_file") == BASE_DIR / ".env"
+
+
+def test_create_app_registers_shared_exception_handlers() -> None:
+    """The app factory should register centralized exception handlers."""
+
+    app = create_app()
+
+    assert ApplicationError in app.exception_handlers
+    assert RequestValidationError in app.exception_handlers
+    assert Exception in app.exception_handlers

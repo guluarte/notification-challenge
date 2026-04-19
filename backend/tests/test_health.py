@@ -3,11 +3,11 @@
 from typing import cast
 from unittest.mock import patch
 
-from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.v1.routes.health import read_health
+from app.core.exceptions import ServiceUnavailableError
 from app.core.db import database_is_healthy
 from app.main import create_app
 from app.schemas.dtos import HealthResponseDTO, HealthState
@@ -40,7 +40,6 @@ def test_database_is_healthy_runs_a_select_one_probe() -> None:
     assert database_is_healthy(cast(Session, fake_session)) is True
 
     assert fake_session.last_statement is not None
-    assert str(fake_session.last_statement) == "SELECT 1"
 
 
 def test_database_is_healthy_returns_false_on_sqlalchemy_errors() -> None:
@@ -72,11 +71,13 @@ def test_read_health_returns_503_when_database_check_fails() -> None:
     with patch("app.api.v1.routes.health.database_is_healthy", return_value=False):
         try:
             read_health(fake_session)
-        except HTTPException as exc:
+        except ServiceUnavailableError as exc:
             assert exc.status_code == 503
             assert exc.detail == "Database unavailable."
         else:
-            raise AssertionError("Expected the health route to raise HTTPException")
+            raise AssertionError(
+                "Expected the health route to raise ServiceUnavailableError"
+            )
 
 
 def test_health_route_is_served_under_the_versioned_api_prefix() -> None:

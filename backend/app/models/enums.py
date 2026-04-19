@@ -13,12 +13,28 @@ class MessageCategory(StrEnum):
     MOVIES = "Movies"
 
 
+class MessageCategoryCode(StrEnum):
+    """Stable category codes used by the API and persistence layers."""
+
+    SPORTS = "sports"
+    FINANCE = "finance"
+    MOVIES = "movies"
+
+
 class NotificationChannelType(StrEnum):
     """Supported outbound notification channels."""
 
     SMS = "SMS"
     EMAIL = "E-Mail"
     PUSH = "Push Notification"
+
+
+class NotificationChannelCode(StrEnum):
+    """Stable notification channel codes used by persistence and routing."""
+
+    SMS = "sms"
+    EMAIL = "email"
+    PUSH = "push"
 
 
 class DeliveryStatus(StrEnum):
@@ -30,15 +46,15 @@ class DeliveryStatus(StrEnum):
 
 
 CATEGORY_SEED_ROWS: tuple[tuple[str, str], ...] = (
-    ("sports", MessageCategory.SPORTS.value),
-    ("finance", MessageCategory.FINANCE.value),
-    ("movies", MessageCategory.MOVIES.value),
+    (MessageCategoryCode.SPORTS.value, MessageCategory.SPORTS.value),
+    (MessageCategoryCode.FINANCE.value, MessageCategory.FINANCE.value),
+    (MessageCategoryCode.MOVIES.value, MessageCategory.MOVIES.value),
 )
 
 CHANNEL_SEED_ROWS: tuple[tuple[str, str], ...] = (
-    ("sms", NotificationChannelType.SMS.value),
-    ("email", NotificationChannelType.EMAIL.value),
-    ("push", NotificationChannelType.PUSH.value),
+    (NotificationChannelCode.SMS.value, NotificationChannelType.SMS.value),
+    (NotificationChannelCode.EMAIL.value, NotificationChannelType.EMAIL.value),
+    (NotificationChannelCode.PUSH.value, NotificationChannelType.PUSH.value),
 )
 
 DELIVERY_STATUS_VALUES: tuple[str, ...] = tuple(
