@@ -292,6 +292,22 @@ pnpm format:check
 pnpm build
 ```
 
+## GitHub Actions
+
+To execute the GitHub Actions workflow locally with `act`, make sure Docker is running and then use:
+
+```bash
+act pull_request -W .github/workflows/ci.yml -P ubuntu-latest=catthehacker/ubuntu:act-latest
+```
+
+To exercise the Docker image publishing path without pushing to GHCR, run:
+
+```bash
+act workflow_dispatch -W .github/workflows/ci.yml -j publish-images -P ubuntu-latest=catthehacker/ubuntu:act-latest
+```
+
+The publish job skips the actual registry login and push when it detects `ACT=true`, but it still builds both Docker images locally.
+
 ## Docker Notes
 
 The repository includes a Docker development stack that reuses the same per-service `.env` files used for local development:

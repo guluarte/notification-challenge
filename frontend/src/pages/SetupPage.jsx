@@ -1,5 +1,3 @@
-import React from 'react'
-
 import { TagPanel } from '../components/TagPanel'
 import { getAppConfig } from '../services/appConfig'
 

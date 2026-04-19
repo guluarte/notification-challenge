@@ -1,5 +1,3 @@
-import React from 'react'
-
 /**
  * @param {{ title: string; items: string[] }} props
  */
