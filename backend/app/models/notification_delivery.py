@@ -1,4 +1,4 @@
-"""Notification delivery audit model."""
+"""Notification attempt audit model."""
 
 from __future__ import annotations
 
@@ -29,34 +29,34 @@ if TYPE_CHECKING:
     from .user import User
 
 
-class NotificationDelivery(Base):
-    """Audit row for an attempted notification delivery."""
+class NotificationAttempt(Base):
+    """Audit row for an attempted notification send."""
 
-    __tablename__ = "notification_deliveries"
+    __tablename__ = "notification_attempts"
     __table_args__ = (
         CheckConstraint(
             "attempt_number > 0",
-            name="ck_notification_deliveries_attempt_number_positive",
+            name="ck_notification_attempts_attempt_number_positive",
         ),
         CheckConstraint(
             "status IN ('pending', 'sent', 'failed')",
-            name="ck_notification_deliveries_status",
+            name="ck_notification_attempts_status",
         ),
         CheckConstraint(
             "btrim(message_body) <> ''",
-            name="ck_notification_deliveries_message_body_not_blank",
+            name="ck_notification_attempts_message_body_not_blank",
         ),
         UniqueConstraint(
             "message_id",
             "user_id",
             "channel_code",
             "attempt_number",
-            name="uq_notification_deliveries_attempt",
+            name="uq_notification_attempts_attempt",
         ),
-        Index("ix_notification_deliveries_attempted_at", "attempted_at"),
-        Index("ix_notification_deliveries_status", "status"),
-        Index("ix_notification_deliveries_user_id", "user_id"),
-        Index("ix_notification_deliveries_message_id", "message_id"),
+        Index("ix_notification_attempts_attempted_at", "attempted_at"),
+        Index("ix_notification_attempts_status", "status"),
+        Index("ix_notification_attempts_user_id", "user_id"),
+        Index("ix_notification_attempts_message_id", "message_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -100,11 +100,11 @@ class NotificationDelivery(Base):
         nullable=True,
     )
 
-    message: Mapped["Message"] = relationship(back_populates="delivery_records")
-    user: Mapped["User"] = relationship(back_populates="delivery_records")
+    message: Mapped["Message"] = relationship(back_populates="notification_attempts")
+    user: Mapped["User"] = relationship(back_populates="notification_attempts")
     channel: Mapped["NotificationChannel"] = relationship(
-        back_populates="delivery_records"
+        back_populates="notification_attempts"
     )
     category: Mapped["NotificationCategory"] = relationship(
-        back_populates="delivery_records"
+        back_populates="notification_attempts"
     )

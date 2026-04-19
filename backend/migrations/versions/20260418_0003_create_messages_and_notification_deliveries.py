@@ -1,4 +1,4 @@
-"""Create messages and notification delivery audit tables."""
+"""Create messages and notification attempt audit tables."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    """Create message submission and delivery audit tables."""
+    """Create message submission and notification attempt audit tables."""
 
     op.create_table(
         "messages",
@@ -33,7 +33,7 @@ def upgrade() -> None:
     op.create_index("ix_messages_created_at", "messages", ["created_at"])
 
     op.create_table(
-        "notification_deliveries",
+        "notification_attempts",
         sa.Column("id", sa.Integer(), sa.Identity(), primary_key=True),
         sa.Column("message_id", sa.Integer(), nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
@@ -63,15 +63,15 @@ def upgrade() -> None:
         sa.Column("delivered_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.CheckConstraint(
             "attempt_number > 0",
-            name="ck_notification_deliveries_attempt_number_positive",
+            name="ck_notification_attempts_attempt_number_positive",
         ),
         sa.CheckConstraint(
             "status IN ('pending', 'sent', 'failed')",
-            name="ck_notification_deliveries_status",
+            name="ck_notification_attempts_status",
         ),
         sa.CheckConstraint(
             "btrim(message_body) <> ''",
-            name="ck_notification_deliveries_message_body_not_blank",
+            name="ck_notification_attempts_message_body_not_blank",
         ),
         sa.ForeignKeyConstraint(["category_code"], ["notification_categories.code"]),
         sa.ForeignKeyConstraint(["channel_code"], ["notification_channels.code"]),
@@ -82,51 +82,51 @@ def upgrade() -> None:
             "user_id",
             "channel_code",
             "attempt_number",
-            name="uq_notification_deliveries_attempt",
+            name="uq_notification_attempts_attempt",
         ),
     )
     op.create_index(
-        "ix_notification_deliveries_attempted_at",
-        "notification_deliveries",
+        "ix_notification_attempts_attempted_at",
+        "notification_attempts",
         ["attempted_at"],
     )
     op.create_index(
-        "ix_notification_deliveries_status",
-        "notification_deliveries",
+        "ix_notification_attempts_status",
+        "notification_attempts",
         ["status"],
     )
     op.create_index(
-        "ix_notification_deliveries_user_id",
-        "notification_deliveries",
+        "ix_notification_attempts_user_id",
+        "notification_attempts",
         ["user_id"],
     )
     op.create_index(
-        "ix_notification_deliveries_message_id",
-        "notification_deliveries",
+        "ix_notification_attempts_message_id",
+        "notification_attempts",
         ["message_id"],
     )
 
 
 def downgrade() -> None:
-    """Drop message submission and delivery audit tables."""
+    """Drop message submission and notification attempt audit tables."""
 
     op.drop_index(
-        "ix_notification_deliveries_message_id",
-        table_name="notification_deliveries",
+        "ix_notification_attempts_message_id",
+        table_name="notification_attempts",
     )
     op.drop_index(
-        "ix_notification_deliveries_user_id",
-        table_name="notification_deliveries",
+        "ix_notification_attempts_user_id",
+        table_name="notification_attempts",
     )
     op.drop_index(
-        "ix_notification_deliveries_status",
-        table_name="notification_deliveries",
+        "ix_notification_attempts_status",
+        table_name="notification_attempts",
     )
     op.drop_index(
-        "ix_notification_deliveries_attempted_at",
-        table_name="notification_deliveries",
+        "ix_notification_attempts_attempted_at",
+        table_name="notification_attempts",
     )
-    op.drop_table("notification_deliveries")
+    op.drop_table("notification_attempts")
 
     op.drop_index("ix_messages_created_at", table_name="messages")
     op.drop_index("ix_messages_category_code", table_name="messages")

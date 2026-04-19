@@ -9,8 +9,8 @@ from app.services.notification_log_service import NotificationLogService
 from app.services.types import NotificationLogEntry
 
 
-class FakeNotificationDeliveryRepository:
-    """Delivery repository double for log listing tests."""
+class FakeNotificationAttemptRepository:
+    """Attempt repository double for log listing tests."""
 
     def __init__(self, entries: list[NotificationLogEntry]) -> None:
         self.entries = entries
@@ -26,7 +26,7 @@ def test_notification_log_service_returns_repository_results() -> None:
 
     entries = [
         NotificationLogEntry(
-            delivery_id=1,
+            attempt_id=1,
             message_id=7,
             category_code="sports",
             body="Final score",
@@ -43,8 +43,8 @@ def test_notification_log_service_returns_repository_results() -> None:
             provider_reference="email-7-2",
         )
     ]
-    repository = FakeNotificationDeliveryRepository(entries=entries)
-    service = NotificationLogService(delivery_repository=repository)
+    repository = FakeNotificationAttemptRepository(entries=entries)
+    service = NotificationLogService(attempt_repository=repository)
 
     result = service.list_logs()
 

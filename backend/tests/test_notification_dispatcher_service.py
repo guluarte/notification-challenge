@@ -13,7 +13,7 @@ from app.services.types import DeliveryResult, PersistedMessage, ResolvedSubscri
 class RecordedAttempt:
     """Captured delivery repository updates for test assertions."""
 
-    delivery_id: int
+    attempt_id: int
     channel_code: str
     status: str
     failure_reason: str | None = None
@@ -34,41 +34,41 @@ class FakeDeliveryRepository:
         subscriber: ResolvedSubscriber,
         channel_code: str,
     ) -> int:
-        delivery_id = self._next_id
+        attempt_id = self._next_id
         self._next_id += 1
         self.attempts.append(
             RecordedAttempt(
-                delivery_id=delivery_id,
+                attempt_id=attempt_id,
                 channel_code=channel_code,
                 status="pending",
             )
         )
-        return delivery_id
+        return attempt_id
 
     def mark_sent(
         self,
         *,
-        delivery_id: int,
+        attempt_id: int,
         provider_reference: str | None,
         delivered_at: datetime,
     ) -> None:
         del delivered_at
-        attempt = self._find(delivery_id)
+        attempt = self._find(attempt_id)
         attempt.status = "sent"
         attempt.provider_reference = provider_reference
         attempt.failure_reason = None
 
-    def mark_failed(self, *, delivery_id: int, failure_reason: str) -> None:
-        attempt = self._find(delivery_id)
+    def mark_failed(self, *, attempt_id: int, failure_reason: str) -> None:
+        attempt = self._find(attempt_id)
         attempt.status = "failed"
         attempt.failure_reason = failure_reason
         attempt.provider_reference = None
 
-    def _find(self, delivery_id: int) -> RecordedAttempt:
+    def _find(self, attempt_id: int) -> RecordedAttempt:
         for attempt in self.attempts:
-            if attempt.delivery_id == delivery_id:
+            if attempt.attempt_id == attempt_id:
                 return attempt
-        raise AssertionError(f"Unknown delivery id {delivery_id}")
+        raise AssertionError(f"Unknown attempt id {attempt_id}")
 
 
 class FakeStrategy:
@@ -118,7 +118,7 @@ def test_notification_dispatcher_isolates_channel_failures() -> None:
         }
     )
     service = NotificationDispatcherService(
-        delivery_repository=repository,
+        attempt_repository=repository,
         strategy_factory=factory,
     )
     message = PersistedMessage(
@@ -144,13 +144,13 @@ def test_notification_dispatcher_isolates_channel_failures() -> None:
     assert summary.failed == 1
     assert repository.attempts == [
         RecordedAttempt(
-            delivery_id=1,
+            attempt_id=1,
             channel_code="email",
             status="sent",
             provider_reference="email-1",
         ),
         RecordedAttempt(
-            delivery_id=2,
+            attempt_id=2,
             channel_code="sms",
             status="failed",
             failure_reason="provider outage",
@@ -163,7 +163,7 @@ def test_notification_dispatcher_handles_missing_strategy_as_attempt_failure() -
 
     repository = FakeDeliveryRepository()
     service = NotificationDispatcherService(
-        delivery_repository=repository,
+        attempt_repository=repository,
         strategy_factory=FakeStrategyFactory(strategies={}),
     )
     message = PersistedMessage(
@@ -189,7 +189,7 @@ def test_notification_dispatcher_handles_missing_strategy_as_attempt_failure() -
     assert summary.failed == 1
     assert repository.attempts == [
         RecordedAttempt(
-            delivery_id=1,
+            attempt_id=1,
             channel_code="push",
             status="failed",
             failure_reason="missing strategy for push",

@@ -1,4 +1,4 @@
-"""Read notification delivery history."""
+"""Read notification attempt history."""
 
 from __future__ import annotations
 
@@ -10,14 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationLogService:
-    """Service for listing notification delivery history."""
+    """Service for listing notification attempt history."""
 
-    def __init__(self, delivery_repository: NotificationLogRepositoryProtocol) -> None:
-        self.delivery_repository = delivery_repository
+    def __init__(self, attempt_repository: NotificationLogRepositoryProtocol) -> None:
+        self.attempt_repository = attempt_repository
 
     def list_logs(self) -> list[NotificationLogEntry]:
-        """Return notification audit logs ordered newest first."""
+        """Return notification attempt logs ordered newest first."""
 
-        logs = self.delivery_repository.list_recent()
-        logger.info("Loaded %s notification delivery log rows", len(logs))
+        logs = self.attempt_repository.list_recent()
+        logger.info("Loaded %s notification attempt log rows", len(logs))
         return logs

@@ -145,7 +145,7 @@ erDiagram
         TEXT body
         TIMESTAMPTZ created_at
     }
-    notification_deliveries {
+    notification_attempts {
         INTEGER id PK
         INTEGER message_id FK
         INTEGER user_id FK
@@ -175,14 +175,22 @@ erDiagram
     notification_channels ||--o{ user_channel_preferences : enables
     users ||--o{ user_channel_preferences : prefers
     notification_categories ||--o{ messages : classifies
-    messages ||--o{ notification_deliveries : fan_out
-    users ||--o{ notification_deliveries : receives
-    notification_channels ||--o{ notification_deliveries : delivers
-    notification_categories ||--o{ notification_deliveries : audits
+    messages ||--o{ notification_attempts : fan_out
+    users ||--o{ notification_attempts : receives
+    notification_channels ||--o{ notification_attempts : delivers
+    notification_categories ||--o{ notification_attempts : audits
 ```
+
+## Schema Notes
+
+`notification_attempts` is the notification attempt audit entity for the system. It stays separate from `messages` so one submitted message can fan out into many independently tracked attempts without losing per-user or per-channel failure details.
+
+`user_category_subscriptions` and `user_channel_preferences` stay normalized instead of being embedded on `users` as arrays. That keeps category targeting and channel selection independently queryable, indexable, and ready for future changes such as retries, reporting, and more granular preference rules.
+
+`seed_users` is only a bootstrap source used to load deterministic demo data into the normalized operational tables. Runtime reads and writes use `users`, `user_category_subscriptions`, and `user_channel_preferences`.
 
 ## Tradeoffs and Future Scalability
 
 - Dispatch runs in-process to keep the challenge small and easy to review.
 - The service/repository/strategy split keeps the domain logic ready for a queue or worker later.
-- `notification_deliveries` already stores status, timestamps, provider references, and failure details, which is enough to support retries in a later iteration.
+- `notification_attempts` already stores status, timestamps, provider references, and failure details, which is enough to support retries in a later iteration.

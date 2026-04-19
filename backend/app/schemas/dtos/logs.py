@@ -1,4 +1,4 @@
-"""DTOs for notification delivery logs."""
+"""DTOs for notification attempt logs."""
 
 from __future__ import annotations
 
@@ -23,9 +23,9 @@ class NotificationRecipientDTO(BaseModel):
 
 
 class NotificationLogListItemDTO(BaseModel):
-    """Single delivery log row returned by the API."""
+    """Single notification attempt row returned by the API."""
 
-    delivery_id: int
+    attempt_id: int
     message_id: int
     category: MessageCategoryCode
     body: str

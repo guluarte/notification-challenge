@@ -8,7 +8,7 @@ from fastapi import Depends
 
 from app.repositories.categories import NotificationCategoryRepository
 from app.repositories.messages import MessageRepository
-from app.repositories.notification_deliveries import NotificationDeliveryRepository
+from app.repositories.notification_deliveries import NotificationAttemptRepository
 from app.repositories.users import UserRepository
 from app.services.message_service import MessageService
 from app.services.notification_dispatcher import NotificationDispatcherService
@@ -34,10 +34,10 @@ def get_message_service(db_session: DBSessionDep) -> MessageService:
     """Compose the message intake service for the current request."""
 
     user_repository = UserRepository(db_session)
-    delivery_repository = NotificationDeliveryRepository(db_session)
+    attempt_repository = NotificationAttemptRepository(db_session)
     subscriber_resolver = SubscriberResolverService(user_repository=user_repository)
     dispatcher = NotificationDispatcherService(
-        delivery_repository=delivery_repository,
+        attempt_repository=attempt_repository,
         strategy_factory=_strategy_factory,
     )
     return MessageService(
@@ -53,7 +53,7 @@ def get_notification_log_service(db_session: DBSessionDep) -> NotificationLogSer
     """Compose the log listing service for the current request."""
 
     return NotificationLogService(
-        delivery_repository=NotificationDeliveryRepository(db_session)
+        attempt_repository=NotificationAttemptRepository(db_session)
     )
 
 

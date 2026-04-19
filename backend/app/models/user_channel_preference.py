@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
@@ -16,6 +16,12 @@ class UserChannelPreference(Base):
     """Join row mapping a user to a preferred notification channel."""
 
     __tablename__ = "user_channel_preferences"
+    __table_args__ = (
+        Index(
+            "ix_user_channel_preferences_channel_code",
+            "channel_code",
+        ),
+    )
 
     user_id: Mapped[int] = mapped_column(
         Integer,

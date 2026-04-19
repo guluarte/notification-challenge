@@ -1,4 +1,4 @@
-"""Routes for notification delivery audit history."""
+"""Routes for notification attempt audit history."""
 
 from __future__ import annotations
 
@@ -20,14 +20,14 @@ router = APIRouter(prefix="/logs", tags=["logs"])
     "",
     response_model=NotificationLogListResponseDTO,
     responses={500: {"model": ErrorResponseDTO}},
-    summary="List notification delivery logs",
+    summary="List notification attempt logs",
 )
 def list_logs(log_service: NotificationLogServiceDep) -> NotificationLogListResponseDTO:
-    """Return delivery logs ordered from newest to oldest."""
+    """Return notification attempt logs ordered from newest to oldest."""
 
     items = [
         NotificationLogListItemDTO(
-            delivery_id=entry.delivery_id,
+            attempt_id=entry.attempt_id,
             message_id=entry.message_id,
             category=MessageCategoryCode(entry.category_code),
             body=entry.body,

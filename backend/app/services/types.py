@@ -65,7 +65,7 @@ class MessageCreationResult:
 class NotificationLogEntry:
     """Audit-log row returned by the repository layer."""
 
-    delivery_id: int
+    attempt_id: int
     message_id: int
     category_code: str
     body: str
@@ -142,14 +142,14 @@ class DeliveryAttemptRepositoryProtocol(Protocol):
     def mark_sent(
         self,
         *,
-        delivery_id: int,
+        attempt_id: int,
         provider_reference: str | None,
         delivered_at: datetime,
     ) -> None:
         """Mark a delivery attempt as sent."""
         ...
 
-    def mark_failed(self, *, delivery_id: int, failure_reason: str) -> None:
+    def mark_failed(self, *, attempt_id: int, failure_reason: str) -> None:
         """Mark a delivery attempt as failed."""
         ...
 

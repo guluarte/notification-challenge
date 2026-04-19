@@ -11,7 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
 if TYPE_CHECKING:
-    from .notification_delivery import NotificationDelivery
+    from .notification_delivery import NotificationAttempt
     from .user_channel_preference import UserChannelPreference
 
 
@@ -31,6 +31,6 @@ class NotificationChannel(Base):
     user_preferences: Mapped[list["UserChannelPreference"]] = relationship(
         back_populates="channel"
     )
-    delivery_records: Mapped[list["NotificationDelivery"]] = relationship(
+    notification_attempts: Mapped[list["NotificationAttempt"]] = relationship(
         back_populates="channel"
     )

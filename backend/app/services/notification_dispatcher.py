@@ -21,10 +21,10 @@ class NotificationDispatcherService:
     def __init__(
         self,
         *,
-        delivery_repository: DeliveryAttemptRepositoryProtocol,
+        attempt_repository: DeliveryAttemptRepositoryProtocol,
         strategy_factory: StrategyFactoryProtocol,
     ) -> None:
-        self.delivery_repository = delivery_repository
+        self.attempt_repository = attempt_repository
         self.strategy_factory = strategy_factory
 
     def dispatch(
@@ -40,14 +40,14 @@ class NotificationDispatcherService:
 
         for subscriber in subscribers:
             for channel_code in subscriber.channel_codes:
-                delivery_id = self.delivery_repository.create_pending_attempt(
+                attempt_id = self.attempt_repository.create_pending_attempt(
                     message=message,
                     subscriber=subscriber,
                     channel_code=channel_code,
                 )
                 logger.info(
-                    "Created delivery attempt id=%s message_id=%s user_id=%s channel=%s",
-                    delivery_id,
+                    "Created notification attempt id=%s message_id=%s user_id=%s channel=%s",
+                    attempt_id,
                     message.id,
                     subscriber.user_id,
                     channel_code,
@@ -58,8 +58,8 @@ class NotificationDispatcherService:
                     result = strategy.send(subscriber=subscriber, message=message)
                 except Exception as exc:
                     failed += 1
-                    self.delivery_repository.mark_failed(
-                        delivery_id=delivery_id,
+                    self.attempt_repository.mark_failed(
+                        attempt_id=attempt_id,
                         failure_reason=str(exc),
                     )
                     logger.exception(
@@ -71,8 +71,8 @@ class NotificationDispatcherService:
                     continue
 
                 sent += 1
-                self.delivery_repository.mark_sent(
-                    delivery_id=delivery_id,
+                self.attempt_repository.mark_sent(
+                    attempt_id=attempt_id,
                     provider_reference=result.provider_reference,
                     delivered_at=result.delivered_at,
                 )

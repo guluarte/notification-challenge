@@ -22,7 +22,7 @@ from .base import Base
 
 if TYPE_CHECKING:
     from .category import NotificationCategory
-    from .notification_delivery import NotificationDelivery
+    from .notification_delivery import NotificationAttempt
 
 
 class Message(Base):
@@ -49,6 +49,6 @@ class Message(Base):
     )
 
     category: Mapped["NotificationCategory"] = relationship(back_populates="messages")
-    delivery_records: Mapped[list["NotificationDelivery"]] = relationship(
+    notification_attempts: Mapped[list["NotificationAttempt"]] = relationship(
         back_populates="message"
     )

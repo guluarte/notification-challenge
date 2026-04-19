@@ -278,7 +278,7 @@ def test_logs_route_returns_log_items() -> None:
     service = FakeNotificationLogService(
         entries=[
             NotificationLogEntry(
-                delivery_id=9,
+                attempt_id=9,
                 message_id=4,
                 category_code="sports",
                 body="Team A won",
@@ -311,7 +311,7 @@ def test_logs_route_returns_log_items() -> None:
     assert payload == {
         "items": [
             {
-                "delivery_id": 9,
+                "attempt_id": 9,
                 "message_id": 4,
                 "category": "sports",
                 "body": "Team A won",
