@@ -14,9 +14,12 @@ from app.models.enums import (
 
 
 class NotificationRecipientDTO(BaseModel):
-    """Recipient reference exposed through the log API without PII."""
+    """Recipient details exposed through the log API for challenge verification."""
 
     id: int
+    name: str
+    email: str
+    phone_number: str
 
 
 class NotificationLogListItemDTO(BaseModel):

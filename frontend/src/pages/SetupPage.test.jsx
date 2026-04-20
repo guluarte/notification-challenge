@@ -57,6 +57,9 @@ describe('SetupPage', () => {
 								body: 'Team A won the championship',
 								user: {
 									id: 1,
+									name: 'Alex Morgan',
+									email: 'alex.morgan@example.com',
+									phone_number: '+15550001001',
 								},
 								channel: 'email',
 								status: 'sent',
@@ -117,9 +120,10 @@ describe('SetupPage', () => {
 				name: 'Team A won the championship',
 			}),
 		).toBeInTheDocument()
+		expect(screen.getByText('Alex Morgan')).toBeInTheDocument()
 		expect(screen.getByText('Recipient #1')).toBeInTheDocument()
-		expect(screen.queryByText('alex@example.com')).not.toBeInTheDocument()
-		expect(screen.queryByText('+15550000001')).not.toBeInTheDocument()
+		expect(screen.getByText('alex.morgan@example.com')).toBeInTheDocument()
+		expect(screen.getByText('+15550001001')).toBeInTheDocument()
 		expect(screen.getByText('email-4-1')).toBeInTheDocument()
 	})
 
@@ -177,6 +181,9 @@ describe('SetupPage', () => {
 							body: 'Team A won',
 							user: {
 								id: 1,
+								name: 'Alex Morgan',
+								email: 'alex.morgan@example.com',
+								phone_number: '+15550001001',
 							},
 							channel: 'push',
 							status: 'sent',
@@ -207,6 +214,7 @@ describe('SetupPage', () => {
 		await screen.findByText(
 			'Delivered 2 of 3 attempts across 2 subscribed users.',
 		)
+		expect(await screen.findByText('Alex Morgan')).toBeInTheDocument()
 		expect(await screen.findByText('push-12-1')).toBeInTheDocument()
 		await waitFor(() => {
 			expect(fetchMock).toHaveBeenCalledTimes(3)
