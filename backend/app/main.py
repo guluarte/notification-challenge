@@ -3,7 +3,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 import logging
-from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,6 +20,21 @@ from .schemas.dtos import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _validation_error_field(location: tuple[int | str, ...]) -> str:
+    """Return a stable field path for validation errors."""
+
+    transport_markers = {"body", "query", "path"}
+    path_parts = [str(part) for part in location]
+
+    while len(path_parts) > 1 and path_parts[0] in transport_markers:
+        path_parts = path_parts[1:]
+
+    if len(path_parts) == 0:
+        return "request"
+
+    return ".".join(path_parts)
 
 
 @asynccontextmanager
@@ -69,7 +83,15 @@ async def handle_application_error(
 ) -> JSONResponse:
     """Return the standard payload for known application errors."""
 
-    application_error = cast(ApplicationError, exc)
+    if not isinstance(exc, ApplicationError):
+        logger.exception("Non-application error routed to application handler")
+        payload = ErrorResponseDTO(
+            detail="Internal server error.",
+            code="internal_server_error",
+        )
+        return JSONResponse(status_code=500, content=payload.model_dump())
+
+    application_error = exc
     logger.warning(
         "Handled application error code=%s detail=%s",
         application_error.code,
@@ -91,14 +113,22 @@ async def handle_validation_error(
 ) -> JSONResponse:
     """Return a predictable payload for request validation failures."""
 
-    validation_error = cast(RequestValidationError, exc)
+    if not isinstance(exc, RequestValidationError):
+        logger.exception("Non-validation error routed to validation handler")
+        payload = ErrorResponseDTO(
+            detail="Internal server error.",
+            code="internal_server_error",
+        )
+        return JSONResponse(status_code=500, content=payload.model_dump())
+
+    validation_error = exc
     logger.warning(
         "Request validation failed with %s errors",
         len(validation_error.errors()),
     )
     errors = [
         ValidationErrorItemDTO(
-            field=".".join(str(part) for part in error["loc"]),
+            field=_validation_error_field(error["loc"]),
             message=str(error["msg"]),
         )
         for error in validation_error.errors()

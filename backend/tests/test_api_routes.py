@@ -114,12 +114,20 @@ class FakeMessageService:
 class FakeNotificationLogService:
     """Log service double for route tests."""
 
-    def __init__(self, entries: list[NotificationLogEntry]) -> None:
+    def __init__(
+        self,
+        entries: list[NotificationLogEntry],
+        *,
+        error: Exception | None = None,
+    ) -> None:
         self.entries = entries
+        self.error = error
         self.calls = 0
 
     def list_logs(self) -> list[NotificationLogEntry]:
         self.calls += 1
+        if self.error is not None:
+            raise self.error
         return self.entries
 
 
@@ -194,8 +202,34 @@ def test_create_message_route_returns_validation_payload_for_blank_body() -> Non
     assert payload["code"] == "validation_error"
     assert payload["errors"] == [
         {
-            "field": "body.body",
+            "field": "body",
             "message": "Value error, Message body must not be blank.",
+        }
+    ]
+    assert service.last_call is None
+
+
+def test_create_message_route_returns_validation_payload_for_invalid_category() -> None:
+    """Unsupported categories should return the centralized validation response."""
+
+    service = FakeMessageService()
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="POST",
+            path="/v1/messages",
+            json_body={"category": "weather", "body": "Forecast"},
+            app_overrides={get_message_service: _message_service_override(service)},
+        )
+    )
+
+    assert status_code == 422
+    assert payload["detail"] == "Request validation failed."
+    assert payload["code"] == "validation_error"
+    assert payload["errors"] == [
+        {
+            "field": "category",
+            "message": "Input should be 'sports', 'finance' or 'movies'",
         }
     ]
     assert service.last_call is None
@@ -332,3 +366,28 @@ def test_logs_route_returns_log_items() -> None:
         ]
     }
     assert service.calls == 1
+
+
+def test_logs_route_maps_infrastructure_errors() -> None:
+    """Infrastructure failures should use the shared error response contract."""
+
+    service = FakeNotificationLogService(
+        entries=[],
+        error=InfrastructureError("The notification logs could not be loaded."),
+    )
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="GET",
+            path="/v1/logs",
+            app_overrides={
+                get_notification_log_service: _log_service_override(service)
+            },
+        )
+    )
+
+    assert status_code == 500
+    assert payload == {
+        "detail": "The notification logs could not be loaded.",
+        "code": "infrastructure_error",
+    }
