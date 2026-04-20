@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -20,6 +21,16 @@ class PersistedMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class UserProfile:
+    """User directory record returned by the repository layer."""
+
+    user_id: int
+    name: str
+    email: str
+    phone_number: str
+
+
+@dataclass(frozen=True, slots=True)
 class ResolvedSubscriber:
     """User and channel preferences resolved for message delivery."""
 
@@ -28,6 +39,17 @@ class ResolvedSubscriber:
     email: str
     phone_number: str
     channel_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PendingNotificationAttempt:
+    """Pending audit row that is ready for channel-specific delivery work."""
+
+    attempt_id: int
+    message: PersistedMessage
+    subscriber: ResolvedSubscriber
+    channel_code: str
+    attempt_number: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +99,11 @@ class NotificationLogEntry:
     status: DeliveryStatus
     attempt_number: int
     attempted_at: datetime
+    processing_started_at: datetime | None
+    processed_at: datetime | None
     delivered_at: datetime | None
+    last_error_at: datetime | None
+    next_retry_at: datetime | None
     failure_reason: str | None
     provider_reference: str | None
 
@@ -110,11 +136,31 @@ class MessageRepositoryProtocol(Protocol):
         ...
 
 
-class SubscriberRepositoryProtocol(Protocol):
-    """Repository contract for subscriber resolution."""
+class UserDirectoryRepositoryProtocol(Protocol):
+    """Repository contract for loading user directory records."""
 
-    def list_subscribed_users(self, *, category_code: str) -> list[ResolvedSubscriber]:
-        """Return subscribed users for a category."""
+    def list_by_ids(self, *, user_ids: Sequence[int]) -> list[UserProfile]:
+        """Return user directory records for the given identifiers."""
+        ...
+
+
+class CategorySubscriptionRepositoryProtocol(Protocol):
+    """Repository contract for category subscription access."""
+
+    def list_subscribed_user_ids(self, *, category_code: str) -> list[int]:
+        """Return user identifiers subscribed to the category."""
+        ...
+
+
+class ChannelPreferenceRepositoryProtocol(Protocol):
+    """Repository contract for channel preference access."""
+
+    def list_channel_codes_by_user_ids(
+        self,
+        *,
+        user_ids: Sequence[int],
+    ) -> dict[int, tuple[str, ...]]:
+        """Return preferred channel codes keyed by user identifier."""
         ...
 
 
@@ -139,6 +185,24 @@ class DeliveryAttemptRepositoryProtocol(Protocol):
         """Create a pending attempt and return its identifier."""
         ...
 
+    def list_pending_attempts(
+        self,
+        *,
+        message_id: int | None = None,
+        limit: int | None = None,
+    ) -> list[PendingNotificationAttempt]:
+        """Return pending attempts that are ready to be processed."""
+        ...
+
+    def mark_processing_started(
+        self,
+        *,
+        attempt_id: int,
+        processing_started_at: datetime,
+    ) -> None:
+        """Record when the attempt began execution."""
+        ...
+
     def mark_sent(
         self,
         *,
@@ -149,7 +213,14 @@ class DeliveryAttemptRepositoryProtocol(Protocol):
         """Mark a delivery attempt as sent."""
         ...
 
-    def mark_failed(self, *, attempt_id: int, failure_reason: str) -> None:
+    def mark_failed(
+        self,
+        *,
+        attempt_id: int,
+        failure_reason: str,
+        processed_at: datetime,
+        next_retry_at: datetime | None,
+    ) -> None:
         """Mark a delivery attempt as failed."""
         ...
 
@@ -177,6 +248,24 @@ class StrategyFactoryProtocol(Protocol):
 
 class NotificationDispatcherProtocol(Protocol):
     """Dispatcher contract used by the message service."""
+
+    def prepare_dispatch(
+        self,
+        *,
+        message: PersistedMessage,
+        subscribers: list[ResolvedSubscriber],
+    ) -> int:
+        """Queue pending attempts for the resolved subscribers."""
+        ...
+
+    def dispatch_pending_attempts(
+        self,
+        *,
+        message_id: int | None = None,
+        limit: int | None = None,
+    ) -> DispatchSummary:
+        """Process pending attempts that are ready for delivery."""
+        ...
 
     def dispatch(
         self,

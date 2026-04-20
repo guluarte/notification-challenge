@@ -34,7 +34,11 @@ class NotificationLogListItemDTO(BaseModel):
     status: DeliveryStatus
     attempt_number: int
     attempted_at: datetime
+    processing_started_at: datetime | None
+    processed_at: datetime | None
     delivered_at: datetime | None
+    last_error_at: datetime | None
+    next_retry_at: datetime | None
     failure_reason: str | None
     provider_reference: str | None
 

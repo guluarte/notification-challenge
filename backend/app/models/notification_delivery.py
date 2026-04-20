@@ -54,6 +54,7 @@ class NotificationAttempt(Base):
             name="uq_notification_attempts_attempt",
         ),
         Index("ix_notification_attempts_attempted_at", "attempted_at"),
+        Index("ix_notification_attempts_next_retry_at", "next_retry_at"),
         Index("ix_notification_attempts_status", "status"),
         Index("ix_notification_attempts_user_id", "user_id"),
         Index("ix_notification_attempts_message_id", "message_id"),
@@ -95,7 +96,23 @@ class NotificationAttempt(Base):
         nullable=False,
         server_default=text("CURRENT_TIMESTAMP"),
     )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

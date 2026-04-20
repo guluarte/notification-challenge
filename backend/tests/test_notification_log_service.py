@@ -48,7 +48,11 @@ def test_notification_log_service_returns_repository_results() -> None:
             status=DeliveryStatus.SENT,
             attempt_number=1,
             attempted_at=datetime.now(tz=timezone.utc),
+            processing_started_at=datetime.now(tz=timezone.utc),
+            processed_at=datetime.now(tz=timezone.utc),
             delivered_at=datetime.now(tz=timezone.utc),
+            last_error_at=None,
+            next_retry_at=None,
             failure_reason=None,
             provider_reference="email-7-2",
         )

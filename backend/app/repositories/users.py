@@ -2,42 +2,36 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from collections.abc import Sequence
 
-from app.models import User, UserCategorySubscription
-from app.services.types import ResolvedSubscriber
+from sqlalchemy import select
+
+from app.models import User
+from app.services.types import UserProfile
 
 from .base import BaseRepository
 
 
 class UserRepository(BaseRepository):
-    """Resolve notification recipients from subscriptions and preferences."""
+    """Query core user directory records."""
 
-    def list_subscribed_users(self, *, category_code: str) -> list[ResolvedSubscriber]:
-        """Return users subscribed to the category with their channel codes."""
+    def list_by_ids(self, *, user_ids: Sequence[int]) -> list[UserProfile]:
+        """Return user directory records ordered by identifier."""
 
-        statement = (
-            select(User)
-            .join(UserCategorySubscription)
-            .options(selectinload(User.channel_preferences))
-            .where(UserCategorySubscription.category_code == category_code)
-            .order_by(User.id.asc())
-        )
+        if len(user_ids) == 0:
+            return []
+
+        statement = select(User).where(User.id.in_(user_ids)).order_by(User.id.asc())
         users = self.session.scalars(statement).all()
-        return [self._to_resolved_subscriber(user) for user in users]
+        return [self._to_user_profile(user) for user in users]
 
     @staticmethod
-    def _to_resolved_subscriber(user: User) -> ResolvedSubscriber:
-        """Map an ORM user to the service layer subscriber structure."""
+    def _to_user_profile(user: User) -> UserProfile:
+        """Map an ORM user to the service layer directory structure."""
 
-        channel_codes = tuple(
-            sorted(preference.channel_code for preference in user.channel_preferences)
-        )
-        return ResolvedSubscriber(
+        return UserProfile(
             user_id=user.id,
             name=user.name,
             email=user.email,
             phone_number=user.phone_number,
-            channel_codes=channel_codes,
         )

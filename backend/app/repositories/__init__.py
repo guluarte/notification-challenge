@@ -3,11 +3,15 @@
 from .categories import NotificationCategoryRepository
 from .messages import MessageRepository
 from .notification_deliveries import NotificationAttemptRepository
+from .user_category_subscriptions import UserCategorySubscriptionRepository
+from .user_channel_preferences import UserChannelPreferenceRepository
 from .users import UserRepository
 
 __all__ = [
     "MessageRepository",
     "NotificationCategoryRepository",
     "NotificationAttemptRepository",
+    "UserCategorySubscriptionRepository",
+    "UserChannelPreferenceRepository",
     "UserRepository",
 ]

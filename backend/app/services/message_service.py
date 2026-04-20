@@ -10,6 +10,7 @@ from app.core.exceptions import InfrastructureError, ServiceUnavailableError
 
 from .types import (
     CategoryRepositoryProtocol,
+    DispatchSummary,
     MessageCreationResult,
     MessageRepositoryProtocol,
     NotificationDispatcherProtocol,
@@ -38,7 +39,13 @@ class MessageService:
         self.subscriber_resolver = subscriber_resolver
         self.notification_dispatcher = notification_dispatcher
 
-    def create_message(self, *, category_code: str, body: str) -> MessageCreationResult:
+    def create_message(
+        self,
+        *,
+        category_code: str,
+        body: str,
+        dispatch_immediately: bool = True,
+    ) -> MessageCreationResult:
         """Persist the message and fan it out to subscribed users."""
 
         if not self.category_repository.exists(category_code):
@@ -55,10 +62,21 @@ class MessageService:
             subscribers = self.subscriber_resolver.resolve_subscribers(
                 category_code=category_code
             )
-            dispatch_summary = self.notification_dispatcher.dispatch(
+            queued_attempts = self.notification_dispatcher.prepare_dispatch(
                 message=message,
                 subscribers=subscribers,
             )
+            dispatch_summary = DispatchSummary(
+                total_attempts=queued_attempts,
+                sent=0,
+                failed=0,
+            )
+            if dispatch_immediately:
+                dispatch_summary = (
+                    self.notification_dispatcher.dispatch_pending_attempts(
+                        message_id=message.id
+                    )
+                )
             self.session.commit()
         except SQLAlchemyError as exc:
             self.session.rollback()
@@ -69,12 +87,16 @@ class MessageService:
             raise InfrastructureError("The message could not be persisted.") from exc
 
         logger.info(
-            "Completed message_id=%s subscribers=%s attempts=%s sent=%s failed=%s",
+            (
+                "Completed message_id=%s subscribers=%s attempts=%s sent=%s "
+                "failed=%s dispatch_immediately=%s"
+            ),
             message.id,
             len(subscribers),
             dispatch_summary.total_attempts,
             dispatch_summary.sent,
             dispatch_summary.failed,
+            dispatch_immediately,
         )
         return MessageCreationResult(
             message_id=message.id,

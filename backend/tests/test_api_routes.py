@@ -308,6 +308,8 @@ def test_logs_route_returns_log_items() -> None:
     """The logs route should expose delivery history through DTOs."""
 
     attempted_at = datetime.now(tz=timezone.utc)
+    processing_started_at = datetime.now(tz=timezone.utc)
+    processed_at = datetime.now(tz=timezone.utc)
     delivered_at = datetime.now(tz=timezone.utc)
     service = FakeNotificationLogService(
         entries=[
@@ -324,7 +326,11 @@ def test_logs_route_returns_log_items() -> None:
                 status=DeliveryStatus.SENT,
                 attempt_number=1,
                 attempted_at=attempted_at,
+                processing_started_at=processing_started_at,
+                processed_at=processed_at,
                 delivered_at=delivered_at,
+                last_error_at=None,
+                next_retry_at=None,
                 failure_reason=None,
                 provider_reference="email-4-1",
             )
@@ -359,7 +365,11 @@ def test_logs_route_returns_log_items() -> None:
                 "status": "sent",
                 "attempt_number": 1,
                 "attempted_at": _isoformat_z(attempted_at),
+                "processing_started_at": _isoformat_z(processing_started_at),
+                "processed_at": _isoformat_z(processed_at),
                 "delivered_at": _isoformat_z(delivered_at),
+                "last_error_at": None,
+                "next_retry_at": None,
                 "failure_reason": None,
                 "provider_reference": "email-4-1",
             }

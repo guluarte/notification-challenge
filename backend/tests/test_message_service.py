@@ -81,9 +81,29 @@ class FakeSubscriberResolver:
 class FakeNotificationDispatcher:
     """Dispatcher double returning a fixed summary."""
 
-    def __init__(self, summary: DispatchSummary) -> None:
+    def __init__(self, *, queued_attempts: int, summary: DispatchSummary) -> None:
+        self.queued_attempts = queued_attempts
         self.summary = summary
-        self.calls: list[tuple[PersistedMessage, list[ResolvedSubscriber]]] = []
+        self.prepare_calls: list[tuple[PersistedMessage, list[ResolvedSubscriber]]] = []
+        self.dispatch_calls: list[tuple[int | None, int | None]] = []
+
+    def prepare_dispatch(
+        self,
+        *,
+        message: PersistedMessage,
+        subscribers: list[ResolvedSubscriber],
+    ) -> int:
+        self.prepare_calls.append((message, subscribers))
+        return self.queued_attempts
+
+    def dispatch_pending_attempts(
+        self,
+        *,
+        message_id: int | None = None,
+        limit: int | None = None,
+    ) -> DispatchSummary:
+        self.dispatch_calls.append((message_id, limit))
+        return self.summary
 
     def dispatch(
         self,
@@ -91,7 +111,7 @@ class FakeNotificationDispatcher:
         message: PersistedMessage,
         subscribers: list[ResolvedSubscriber],
     ) -> DispatchSummary:
-        self.calls.append((message, subscribers))
+        del message, subscribers
         return self.summary
 
 
@@ -108,7 +128,8 @@ def test_message_service_commits_successful_dispatch() -> None:
     message_repository = FakeMessageRepository(message)
     subscriber_resolver = FakeSubscriberResolver(count=2)
     dispatcher = FakeNotificationDispatcher(
-        DispatchSummary(total_attempts=3, sent=2, failed=1)
+        queued_attempts=3,
+        summary=DispatchSummary(total_attempts=3, sent=2, failed=1),
     )
     service = MessageService(
         session=session,
@@ -134,7 +155,8 @@ def test_message_service_commits_successful_dispatch() -> None:
     assert session.rollback_called is False
     assert message_repository.calls == [("sports", "Team A won")]
     assert subscriber_resolver.calls == ["sports"]
-    assert dispatcher.calls == [(message, subscriber_resolver.subscribers)]
+    assert dispatcher.prepare_calls == [(message, subscriber_resolver.subscribers)]
+    assert dispatcher.dispatch_calls == [(5, None)]
 
 
 def test_message_service_returns_zero_attempts_for_empty_subscriber_list() -> None:
@@ -153,7 +175,8 @@ def test_message_service_returns_zero_attempts_for_empty_subscriber_list() -> No
         message_repository=FakeMessageRepository(message),
         subscriber_resolver=FakeSubscriberResolver(count=0),
         notification_dispatcher=FakeNotificationDispatcher(
-            DispatchSummary(total_attempts=0, sent=0, failed=0)
+            queued_attempts=0,
+            summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
         ),
     )
 
@@ -188,7 +211,8 @@ def test_message_service_raises_service_unavailable_when_category_catalog_is_mis
         ),
         subscriber_resolver=FakeSubscriberResolver(count=0),
         notification_dispatcher=FakeNotificationDispatcher(
-            DispatchSummary(total_attempts=0, sent=0, failed=0)
+            queued_attempts=0,
+            summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
         ),
     )
 
@@ -220,7 +244,8 @@ def test_message_service_rolls_back_when_commit_fails() -> None:
         ),
         subscriber_resolver=FakeSubscriberResolver(count=1),
         notification_dispatcher=FakeNotificationDispatcher(
-            DispatchSummary(total_attempts=1, sent=1, failed=0)
+            queued_attempts=1,
+            summary=DispatchSummary(total_attempts=1, sent=1, failed=0),
         ),
     )
 
@@ -233,3 +258,48 @@ def test_message_service_rolls_back_when_commit_fails() -> None:
 
     assert session.commit_called is True
     assert session.rollback_called is True
+
+
+def test_message_service_can_queue_attempts_without_dispatching_them() -> None:
+    """The service should support persisting pending attempts for later workers."""
+
+    session = FakeSession()
+    message = PersistedMessage(
+        id=13,
+        category_code="movies",
+        body="Premiere tonight",
+        created_at=datetime.now(tz=timezone.utc),
+    )
+    dispatcher = FakeNotificationDispatcher(
+        queued_attempts=2,
+        summary=DispatchSummary(total_attempts=2, sent=2, failed=0),
+    )
+    subscriber_resolver = FakeSubscriberResolver(count=2)
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=FakeMessageRepository(message),
+        subscriber_resolver=subscriber_resolver,
+        notification_dispatcher=dispatcher,
+    )
+
+    result = service.create_message(
+        category_code="movies",
+        body="Premiere tonight",
+        dispatch_immediately=False,
+    )
+
+    assert result == MessageCreationResult(
+        message_id=13,
+        category_code="movies",
+        body="Premiere tonight",
+        total_users=2,
+        total_attempts=2,
+        sent=0,
+        failed=0,
+        created_at=message.created_at,
+    )
+    assert session.commit_called is True
+    assert session.rollback_called is False
+    assert dispatcher.prepare_calls == [(message, subscriber_resolver.subscribers)]
+    assert dispatcher.dispatch_calls == []

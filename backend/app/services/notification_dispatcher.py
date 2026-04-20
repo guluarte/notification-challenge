@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 
 from .types import (
     DeliveryAttemptRepositoryProtocol,
     DispatchSummary,
+    PendingNotificationAttempt,
     PersistedMessage,
     ResolvedSubscriber,
     StrategyFactoryProtocol,
@@ -27,16 +29,15 @@ class NotificationDispatcherService:
         self.attempt_repository = attempt_repository
         self.strategy_factory = strategy_factory
 
-    def dispatch(
+    def prepare_dispatch(
         self,
         *,
         message: PersistedMessage,
         subscribers: list[ResolvedSubscriber],
-    ) -> DispatchSummary:
-        """Attempt delivery for each user/channel combination."""
+    ) -> int:
+        """Queue one pending attempt per user/channel combination."""
 
-        sent = 0
-        failed = 0
+        queued_attempts = 0
 
         for subscriber in subscribers:
             if len(subscriber.channel_codes) == 0:
@@ -53,46 +54,123 @@ class NotificationDispatcherService:
                     subscriber=subscriber,
                     channel_code=channel_code,
                 )
+                queued_attempts += 1
                 logger.info(
-                    "Created notification attempt id=%s message_id=%s user_id=%s channel=%s",
+                    "Queued notification attempt id=%s message_id=%s user_id=%s channel=%s",
                     attempt_id,
                     message.id,
                     subscriber.user_id,
                     channel_code,
                 )
 
-                try:
-                    strategy = self.strategy_factory.get_strategy(channel_code)
-                    result = strategy.send(subscriber=subscriber, message=message)
-                except Exception as exc:
-                    failed += 1
-                    self.attempt_repository.mark_failed(
-                        attempt_id=attempt_id,
-                        failure_reason=str(exc),
-                    )
-                    logger.exception(
-                        "Notification delivery failed for message_id=%s user_id=%s channel=%s",
-                        message.id,
-                        subscriber.user_id,
-                        channel_code,
-                    )
-                    continue
+        return queued_attempts
 
+    def dispatch_pending_attempts(
+        self,
+        *,
+        message_id: int | None = None,
+        limit: int | None = None,
+    ) -> DispatchSummary:
+        """Deliver ready pending attempts from the audit table."""
+
+        sent = 0
+        failed = 0
+        pending_attempts = self.attempt_repository.list_pending_attempts(
+            message_id=message_id,
+            limit=limit,
+        )
+
+        for pending_attempt in pending_attempts:
+            if self._deliver_attempt(pending_attempt=pending_attempt):
                 sent += 1
-                self.attempt_repository.mark_sent(
-                    attempt_id=attempt_id,
-                    provider_reference=result.provider_reference,
-                    delivered_at=result.delivered_at,
-                )
-                logger.info(
-                    "Notification delivery succeeded for message_id=%s user_id=%s channel=%s",
-                    message.id,
-                    subscriber.user_id,
-                    channel_code,
-                )
+            else:
+                failed += 1
 
         return DispatchSummary(
-            total_attempts=sent + failed,
+            total_attempts=len(pending_attempts),
             sent=sent,
             failed=failed,
         )
+
+    def dispatch(
+        self,
+        *,
+        message: PersistedMessage,
+        subscribers: list[ResolvedSubscriber],
+    ) -> DispatchSummary:
+        """Queue and deliver notification attempts in-process."""
+
+        queued_attempts = self.prepare_dispatch(
+            message=message,
+            subscribers=subscribers,
+        )
+        summary = self.dispatch_pending_attempts(message_id=message.id)
+
+        if summary.total_attempts != queued_attempts:
+            logger.warning(
+                "Pending attempt count changed before in-process dispatch for message_id=%s queued=%s dispatched=%s",
+                message.id,
+                queued_attempts,
+                summary.total_attempts,
+            )
+
+        return summary
+
+    def _deliver_attempt(self, *, pending_attempt: PendingNotificationAttempt) -> bool:
+        """Send one queued notification attempt and persist the result."""
+
+        self.attempt_repository.mark_processing_started(
+            attempt_id=pending_attempt.attempt_id,
+            processing_started_at=datetime.now(tz=timezone.utc),
+        )
+
+        try:
+            strategy = self.strategy_factory.get_strategy(pending_attempt.channel_code)
+            result = strategy.send(
+                subscriber=pending_attempt.subscriber,
+                message=pending_attempt.message,
+            )
+        except Exception as exc:
+            failed_at = datetime.now(tz=timezone.utc)
+            self.attempt_repository.mark_failed(
+                attempt_id=pending_attempt.attempt_id,
+                failure_reason=str(exc),
+                processed_at=failed_at,
+                next_retry_at=self._next_retry_at(
+                    pending_attempt=pending_attempt,
+                    processed_at=failed_at,
+                ),
+            )
+            logger.exception(
+                "Notification delivery failed for attempt_id=%s message_id=%s user_id=%s channel=%s",
+                pending_attempt.attempt_id,
+                pending_attempt.message.id,
+                pending_attempt.subscriber.user_id,
+                pending_attempt.channel_code,
+            )
+            return False
+
+        self.attempt_repository.mark_sent(
+            attempt_id=pending_attempt.attempt_id,
+            provider_reference=result.provider_reference,
+            delivered_at=result.delivered_at,
+        )
+        logger.info(
+            "Notification delivery succeeded for attempt_id=%s message_id=%s user_id=%s channel=%s",
+            pending_attempt.attempt_id,
+            pending_attempt.message.id,
+            pending_attempt.subscriber.user_id,
+            pending_attempt.channel_code,
+        )
+        return True
+
+    @staticmethod
+    def _next_retry_at(
+        *,
+        pending_attempt: PendingNotificationAttempt,
+        processed_at: datetime,
+    ) -> datetime | None:
+        """Return the next retry timestamp for a failed attempt."""
+
+        del pending_attempt, processed_at
+        return None

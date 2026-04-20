@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from .types import ResolvedSubscriber, SubscriberRepositoryProtocol
+from .types import (
+    CategorySubscriptionRepositoryProtocol,
+    ChannelPreferenceRepositoryProtocol,
+    ResolvedSubscriber,
+    UserDirectoryRepositoryProtocol,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -12,24 +17,58 @@ logger = logging.getLogger(__name__)
 class SubscriberResolverService:
     """Service for resolving subscribed users and their channel preferences."""
 
-    def __init__(self, user_repository: SubscriberRepositoryProtocol) -> None:
+    def __init__(
+        self,
+        *,
+        user_repository: UserDirectoryRepositoryProtocol,
+        subscription_repository: CategorySubscriptionRepositoryProtocol,
+        channel_preference_repository: ChannelPreferenceRepositoryProtocol,
+    ) -> None:
         self.user_repository = user_repository
+        self.subscription_repository = subscription_repository
+        self.channel_preference_repository = channel_preference_repository
 
     def resolve_subscribers(self, *, category_code: str) -> list[ResolvedSubscriber]:
         """Return subscribers eligible for the message category."""
 
-        subscribed_users = self.user_repository.list_subscribed_users(
+        subscribed_user_ids = self.subscription_repository.list_subscribed_user_ids(
             category_code=category_code
         )
-        subscribers = [
-            subscriber
-            for subscriber in subscribed_users
-            if len(subscriber.channel_codes) > 0
-        ]
+        if len(subscribed_user_ids) == 0:
+            logger.info(
+                "Resolved 0 eligible subscribers for category=%s", category_code
+            )
+            return []
+
+        users = self.user_repository.list_by_ids(user_ids=subscribed_user_ids)
+        channel_codes_by_user_id = (
+            self.channel_preference_repository.list_channel_codes_by_user_ids(
+                user_ids=subscribed_user_ids
+            )
+        )
+
+        subscribers: list[ResolvedSubscriber] = []
+        skipped_without_channels = 0
+        for user in users:
+            channel_codes = channel_codes_by_user_id.get(user.user_id, ())
+            if len(channel_codes) == 0:
+                skipped_without_channels += 1
+                continue
+
+            subscribers.append(
+                ResolvedSubscriber(
+                    user_id=user.user_id,
+                    name=user.name,
+                    email=user.email,
+                    phone_number=user.phone_number,
+                    channel_codes=channel_codes,
+                )
+            )
+
         logger.info(
             "Resolved %s eligible subscribers for category=%s (skipped_without_channels=%s)",
             len(subscribers),
             category_code,
-            len(subscribed_users) - len(subscribers),
+            skipped_without_channels,
         )
         return subscribers

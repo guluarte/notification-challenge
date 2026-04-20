@@ -41,7 +41,11 @@ def list_logs(log_service: NotificationLogServiceDep) -> NotificationLogListResp
             status=entry.status,
             attempt_number=entry.attempt_number,
             attempted_at=entry.attempted_at,
+            processing_started_at=entry.processing_started_at,
+            processed_at=entry.processed_at,
             delivered_at=entry.delivered_at,
+            last_error_at=entry.last_error_at,
+            next_retry_at=entry.next_retry_at,
             failure_reason=entry.failure_reason,
             provider_reference=entry.provider_reference,
         )
