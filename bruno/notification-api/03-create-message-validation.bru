@@ -1,0 +1,38 @@
+meta {
+  name: Create Message Validation Error
+  type: http
+  seq: 3
+  tags: [
+    regression
+    e2e
+  ]
+}
+
+post {
+  url: {{baseUrl}}/v1/messages
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+body {
+  {
+    "category": "sports",
+    "body": "   "
+  }
+}
+
+tests {
+  test("blank bodies are rejected", function () {
+    const payload = res.getBody();
+
+    expect(res.getStatus()).to.equal(422);
+    expect(payload.code).to.equal("validation_error");
+    expect(payload.detail).to.equal("Request validation failed.");
+    expect(payload.errors).to.be.an("array");
+    expect(payload.errors[0].field).to.equal("body");
+  });
+}

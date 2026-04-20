@@ -31,12 +31,7 @@ def list_logs(log_service: NotificationLogServiceDep) -> NotificationLogListResp
             message_id=entry.message_id,
             category=MessageCategoryCode(entry.category_code),
             body=entry.body,
-            user=NotificationRecipientDTO(
-                id=entry.user_id,
-                name=entry.user_name,
-                email=entry.user_email,
-                phone_number=entry.user_phone_number,
-            ),
+            user=NotificationRecipientDTO(id=entry.user_id),
             channel=NotificationChannelCode(entry.channel_code),
             status=entry.status,
             attempt_number=entry.attempt_number,

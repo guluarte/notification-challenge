@@ -1,0 +1,41 @@
+meta {
+  name: List Notification Logs
+  type: http
+  seq: 4
+  tags: [
+    smoke
+    e2e
+  ]
+}
+
+get {
+  url: {{baseUrl}}/v1/logs
+  body: none
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+tests {
+  test("logs include the created message attempts in newest-first order", function () {
+    const payload = res.getBody();
+    const messageId = bru.getVar("messageId");
+    const messageBody = bru.getVar("messageBody");
+    const createdItems = payload.items.filter(item => item.message_id === messageId);
+
+    expect(res.getStatus()).to.equal(200);
+    expect(payload.items).to.be.an("array");
+    expect(createdItems.length).to.equal(5);
+    expect(payload.items[0].message_id).to.equal(messageId);
+
+    createdItems.forEach(item => {
+      expect(item.category).to.equal("sports");
+      expect(item.body).to.equal(messageBody);
+      expect(item.status).to.equal("sent");
+      expect(item.user).to.be.an("object");
+      expect(item.channel).to.be.oneOf(["email", "push", "sms"]);
+    });
+  });
+}

@@ -1,0 +1,46 @@
+meta {
+  name: Create Message Success
+  type: http
+  seq: 2
+  tags: [
+    smoke
+    e2e
+  ]
+}
+
+post {
+  url: {{baseUrl}}/v1/messages
+  body: json
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+script:pre-request {
+  bru.setVar("messageBody", `Bruno E2E ${Date.now()}`);
+}
+
+body {
+  {
+    "category": "sports",
+    "body": "{{messageBody}}"
+  }
+}
+
+tests {
+  test("message submission succeeds", function () {
+    const payload = res.getBody();
+
+    expect(res.getStatus()).to.equal(201);
+    expect(payload.category).to.equal("sports");
+    expect(payload.body).to.equal(bru.getVar("messageBody"));
+    expect(payload.total_users).to.equal(2);
+    expect(payload.total_attempts).to.equal(5);
+    expect(payload.sent).to.equal(5);
+    expect(payload.failed).to.equal(0);
+    expect(payload.message_id).to.be.a("number");
+    bru.setVar("messageId", payload.message_id);
+  });
+}

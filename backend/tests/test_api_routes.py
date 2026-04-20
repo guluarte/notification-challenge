@@ -357,9 +357,6 @@ def test_logs_route_returns_log_items() -> None:
                 "body": "Team A won",
                 "user": {
                     "id": 1,
-                    "name": "Alex",
-                    "email": "alex@example.com",
-                    "phone_number": "+15550000001",
                 },
                 "channel": "email",
                 "status": "sent",
