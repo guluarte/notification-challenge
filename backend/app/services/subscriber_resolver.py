@@ -18,12 +18,18 @@ class SubscriberResolverService:
     def resolve_subscribers(self, *, category_code: str) -> list[ResolvedSubscriber]:
         """Return subscribers eligible for the message category."""
 
-        subscribers = self.user_repository.list_subscribed_users(
+        subscribed_users = self.user_repository.list_subscribed_users(
             category_code=category_code
         )
+        subscribers = [
+            subscriber
+            for subscriber in subscribed_users
+            if len(subscriber.channel_codes) > 0
+        ]
         logger.info(
-            "Resolved %s subscribers for category=%s",
+            "Resolved %s eligible subscribers for category=%s (skipped_without_channels=%s)",
             len(subscribers),
             category_code,
+            len(subscribed_users) - len(subscribers),
         )
         return subscribers

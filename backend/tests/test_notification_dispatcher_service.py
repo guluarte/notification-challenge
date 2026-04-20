@@ -208,3 +208,38 @@ def test_notification_dispatcher_handles_missing_strategy_as_attempt_failure() -
         )
     ]
     assert repository.delivered_timestamps == {}
+
+
+def test_notification_dispatcher_skips_subscribers_without_channels() -> None:
+    """Subscribers without channel preferences should not create audit attempts."""
+
+    repository = FakeDeliveryRepository()
+    service = NotificationDispatcherService(
+        attempt_repository=repository,
+        strategy_factory=FakeStrategyFactory(
+            strategies={"email": FakeStrategy(provider_reference="email-1")}
+        ),
+    )
+    message = PersistedMessage(
+        id=12,
+        category_code="finance",
+        body="Quarterly update",
+        created_at=datetime.now(tz=timezone.utc),
+    )
+    subscribers = [
+        ResolvedSubscriber(
+            user_id=5,
+            name="Casey",
+            email="casey@example.com",
+            phone_number="+15550000003",
+            channel_codes=(),
+        )
+    ]
+
+    summary = service.dispatch(message=message, subscribers=subscribers)
+
+    assert summary.total_attempts == 0
+    assert summary.sent == 0
+    assert summary.failed == 0
+    assert repository.attempts == []
+    assert repository.delivered_timestamps == {}

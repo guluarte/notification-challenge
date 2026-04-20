@@ -37,3 +37,31 @@ def test_subscriber_resolver_returns_repository_results() -> None:
 
     assert result == subscribers
     assert repository.requested_category_code == "sports"
+
+
+def test_subscriber_resolver_filters_out_subscribers_without_channels() -> None:
+    """Users without configured channels should not be considered eligible."""
+
+    subscribers = [
+        ResolvedSubscriber(
+            user_id=1,
+            name="Alex",
+            email="alex@example.com",
+            phone_number="+15550000001",
+            channel_codes=("email",),
+        ),
+        ResolvedSubscriber(
+            user_id=2,
+            name="Jordan",
+            email="jordan@example.com",
+            phone_number="+15550000002",
+            channel_codes=(),
+        ),
+    ]
+    repository = FakeUserRepository(subscribers=subscribers)
+    service = SubscriberResolverService(user_repository=repository)
+
+    result = service.resolve_subscribers(category_code="sports")
+
+    assert result == [subscribers[0]]
+    assert repository.requested_category_code == "sports"

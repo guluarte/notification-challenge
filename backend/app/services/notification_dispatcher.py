@@ -39,6 +39,14 @@ class NotificationDispatcherService:
         failed = 0
 
         for subscriber in subscribers:
+            if len(subscriber.channel_codes) == 0:
+                logger.info(
+                    "Skipping subscriber user_id=%s for message_id=%s because no channels are configured",
+                    subscriber.user_id,
+                    message.id,
+                )
+                continue
+
             for channel_code in subscriber.channel_codes:
                 attempt_id = self.attempt_repository.create_pending_attempt(
                     message=message,
