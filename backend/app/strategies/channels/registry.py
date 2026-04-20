@@ -13,7 +13,19 @@ class NotificationStrategyFactory:
     """Resolve channel strategies by stable channel code."""
 
     def __init__(self, strategies: Iterable[NotificationStrategy]) -> None:
-        self._strategies = {strategy.channel_code: strategy for strategy in strategies}
+        self._strategies: dict[str, NotificationStrategy] = {}
+
+        for strategy in strategies:
+            channel_code = strategy.channel_code
+            if channel_code == "":
+                raise StrategyConfigurationError(
+                    "Configured notification strategies must declare a channel code."
+                )
+            if channel_code in self._strategies:
+                raise StrategyConfigurationError(
+                    f"Duplicate notification strategy configured for channel '{channel_code}'."
+                )
+            self._strategies[channel_code] = strategy
 
     def get_strategy(self, channel_code: str) -> NotificationStrategy:
         """Return the configured strategy for a channel code."""
