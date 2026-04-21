@@ -63,6 +63,60 @@ function parseLogPageSize(
 	return null
 }
 
+interface LogPaginationBarProps {
+	placement: 'top' | 'bottom'
+}
+
+function LogPaginationBar({ placement }: LogPaginationBarProps) {
+	const {
+		currentPage,
+		totalPages,
+		totalItems,
+		firstVisibleItem,
+		lastVisibleItem,
+		hasPreviousPage,
+		hasNextPage,
+		goToPreviousPage,
+		goToNextPage,
+	} = useNotificationLogState()
+
+	return (
+		<nav
+			aria-label={`${placement} notification log pagination`}
+			className="flex flex-col gap-3 rounded-[1.4rem] border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-stone-600 sm:flex-row sm:items-center sm:justify-between"
+		>
+			<p>
+				Showing {firstVisibleItem}-{lastVisibleItem} of {totalItems}
+			</p>
+			<div className="flex items-center gap-2">
+				<Button
+					type="button"
+					variant="outline"
+					onClick={goToPreviousPage}
+					disabled={!hasPreviousPage}
+					className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
+				>
+					<ChevronLeft className="size-4" />
+					Previous
+				</Button>
+				<span className="min-w-24 text-center font-medium text-stone-900">
+					Page {currentPage} of {totalPages}
+				</span>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={goToNextPage}
+					disabled={!hasNextPage}
+					className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
+				>
+					Next
+					<ChevronRight className="size-4" />
+				</Button>
+			</div>
+		</nav>
+	)
+}
+
 export function NotificationLogList() {
 	const {
 		items,
@@ -71,16 +125,7 @@ export function NotificationLogList() {
 		isRefreshing,
 		pageSize,
 		pageSizeOptions,
-		currentPage,
-		totalPages,
-		totalItems,
-		firstVisibleItem,
-		lastVisibleItem,
-		hasPreviousPage,
-		hasNextPage,
 		setPageSize,
-		goToPreviousPage,
-		goToNextPage,
 		refresh,
 	} = useNotificationLogState()
 
@@ -152,36 +197,7 @@ export function NotificationLogList() {
 			</CardHeader>
 
 			<CardContent className="grid gap-4">
-				<div className="flex flex-col gap-3 rounded-[1.4rem] border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-stone-600 sm:flex-row sm:items-center sm:justify-between">
-					<p>
-						Showing {firstVisibleItem}-{lastVisibleItem} of {totalItems}
-					</p>
-					<div className="flex items-center gap-2">
-						<Button
-							type="button"
-							variant="outline"
-							onClick={goToPreviousPage}
-							disabled={!hasPreviousPage}
-							className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
-						>
-							<ChevronLeft className="size-4" />
-							Previous
-						</Button>
-						<span className="min-w-24 text-center font-medium text-stone-900">
-							Page {currentPage} of {totalPages}
-						</span>
-						<Button
-							type="button"
-							variant="outline"
-							onClick={goToNextPage}
-							disabled={!hasNextPage}
-							className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
-						>
-							Next
-							<ChevronRight className="size-4" />
-						</Button>
-					</div>
-				</div>
+				<LogPaginationBar placement="top" />
 
 				{errorMessage ? (
 					<div
@@ -307,6 +323,8 @@ export function NotificationLogList() {
 						))}
 					</ol>
 				) : null}
+
+				<LogPaginationBar placement="bottom" />
 			</CardContent>
 		</Card>
 	)

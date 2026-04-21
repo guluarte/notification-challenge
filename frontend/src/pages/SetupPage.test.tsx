@@ -77,11 +77,25 @@ describe('SetupPage', () => {
 				name: 'Notification Control Center',
 			}),
 		).toBeInTheDocument()
-		expect(await screen.findByText('Showing 1-1 of 1')).toBeInTheDocument()
-		expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
+		expect(await screen.findAllByText('Showing 1-1 of 1')).toHaveLength(2)
+		expect(screen.getAllByText('Page 1 of 1')).toHaveLength(2)
+		expect(
+			screen.getAllByRole('navigation', {
+				name: /notification log pagination/,
+			}),
+		).toHaveLength(2)
 		expect(
 			screen.getByRole('combobox', { name: 'Rows per page' }),
 		).toHaveTextContent('10')
+		expect(screen.getByRole('combobox', { name: 'Rows per page' })).toHaveClass(
+			'cursor-pointer',
+		)
+		expect(screen.getByRole('button', { name: 'Refresh logs' })).toHaveClass(
+			'cursor-pointer',
+		)
+		expect(screen.getByRole('button', { name: 'Send message' })).toHaveClass(
+			'cursor-pointer',
+		)
 		expect(fetchMock).toHaveBeenCalledWith(
 			'http://localhost:9000/v1/logs?limit=10&offset=0',
 		)
