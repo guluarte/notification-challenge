@@ -1,5 +1,3 @@
-from typing import cast
-
 from sqlalchemy import Table
 
 from app.models.enums import (
@@ -72,8 +70,12 @@ def test_delivery_status_values_cover_pending_sent_and_failed() -> None:
 
 
 def test_subscription_tables_keep_lookup_indexes_declared_in_orm() -> None:
-    category_table = cast(Table, UserCategorySubscription.__table__)
-    channel_table = cast(Table, UserChannelPreference.__table__)
+    category_table = UserCategorySubscription.__table__
+    channel_table = UserChannelPreference.__table__
+
+    assert isinstance(category_table, Table)
+    assert isinstance(channel_table, Table)
+
     category_index_names = {
         index_name
         for index in category_table.indexes

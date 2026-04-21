@@ -178,33 +178,25 @@ export function NotificationLogList({
 
 								<Separator className="my-4 bg-stone-200/80" />
 
-								<dl className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-5">
+								<dl className="grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
 									<div className="space-y-1">
 										<dt className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-stone-500">
 											Recipient
 										</dt>
-										<dd className="space-y-1">
+										<dd className="space-y-1 text-stone-700">
 											<p className="font-medium text-stone-900">
-												{item.user.name}
+												Details withheld
 											</p>
 											<p className="text-stone-500">
-												Recipient #{item.user.id}
+												PII is kept server-side in the audit record.
 											</p>
 										</dd>
 									</div>
 									<div className="space-y-1">
 										<dt className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-stone-500">
-											Email
+											Attempt
 										</dt>
-										<dd className="break-all text-stone-700">
-											{item.user.email}
-										</dd>
-									</div>
-									<div className="space-y-1">
-										<dt className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-stone-500">
-											Phone
-										</dt>
-										<dd className="text-stone-700">{item.user.phone_number}</dd>
+										<dd className="text-stone-700">#{item.attempt_id}</dd>
 									</div>
 									<div className="space-y-1">
 										<dt className="text-[0.72rem] font-semibold uppercase tracking-[0.2em] text-stone-500">

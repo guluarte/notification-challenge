@@ -5,7 +5,7 @@ Small notification service built for a backend-focused code challenge.
 Current status:
 
 - Backend API is implemented with message submission, fan-out dispatch, audit logging, migrations, and seed data.
-- Frontend is still a lightweight setup page, not the final form-and-history UI from the brief.
+- Frontend includes the required submission form and newest-first log history UI from the brief.
 
 ## Stack
 
@@ -19,6 +19,7 @@ Current status:
 - Resolve subscribed users and preferred channels
 - Dispatch through channel strategies
 - Persist one audit row per delivery attempt
+- Queue attempts separately from executing them so the same domain flow can run in-process or from a worker later
 - List logs ordered newest to oldest
 
 Supported categories:
@@ -99,6 +100,8 @@ ruff check app tests
 uv run pytest tests/
 ```
 
+`uv run pytest tests/` now enforces a minimum backend coverage threshold of `90%` through `pytest-cov`.
+
 Frontend:
 
 ```bash
@@ -106,9 +109,26 @@ cd frontend
 nvm use
 pnpm test
 tsc --noEmit
-pnpm exec biome format --check src
+pnpm exec biome check . --formatter-enabled=true --linter-enabled=false --assist-enabled=false
 pnpm exec biome lint src
 ```
+
+Bruno E2E:
+
+```bash
+docker compose up -d db migrate seed backend
+cd bruno/notification-api
+bru run --env-file ./environments/local.bru
+```
+
+The Bruno collection validates the public API from the outside in:
+
+- `GET /v1/health`
+- `POST /v1/messages` happy path
+- `POST /v1/messages` validation failure for blank bodies
+- `GET /v1/logs` newest-first audit history after message submission
+
+Intentionally uncovered areas are limited to framework-generated and forced infrastructure failure branches that are already covered more deterministically by backend unit tests and dependency-override route tests.
 
 ## Database Diagram
 
@@ -160,7 +180,11 @@ erDiagram
         TEXT failure_reason
         VARCHAR provider_reference
         TIMESTAMPTZ attempted_at
+        TIMESTAMPTZ processing_started_at
+        TIMESTAMPTZ processed_at
         TIMESTAMPTZ delivered_at
+        TIMESTAMPTZ last_error_at
+        TIMESTAMPTZ next_retry_at
     }
 
     notification_categories ||--o{ user_category_subscriptions : categorizes
@@ -178,12 +202,15 @@ erDiagram
 
 `notification_attempts` is the notification attempt audit entity for the system. It stays separate from `messages` so one submitted message can fan out into many independently tracked attempts without losing per-user or per-channel failure details.
 
+The dispatch flow is intentionally split into two phases: queue pending attempts first, then execute ready attempts. The API still runs both phases in-process today, but the same service boundaries can be reused by a background worker later without rewriting channel orchestration.
+
 `user_category_subscriptions` and `user_channel_preferences` stay normalized instead of being embedded on `users` as arrays. That keeps category targeting and channel selection independently queryable, indexable, and ready for future changes such as retries, reporting, and more granular preference rules.
 
 The demo data is loaded by `python -m app.seeders.run`, which seeds the normalized operational tables directly. That keeps the runtime schema smaller while still giving local and Docker environments a deterministic, repeatable dataset.
 
 ## Tradeoffs and Future Scalability
 
-- Dispatch runs in-process to keep the challenge small and easy to review.
-- The service/repository/strategy split keeps the domain logic ready for a queue or worker later.
-- `notification_attempts` already stores status, timestamps, provider references, and failure details, which is enough to support retries in a later iteration.
+- Dispatch still runs in-process for the challenge to keep setup and review simple.
+- The dispatcher now separates queueing from execution, so a worker can process pending attempts later without changing repository or strategy logic.
+- `notification_attempts` stores pending, processing, and finalization timestamps plus `next_retry_at`, which provides the lifecycle metadata needed for retries and queue-based execution later.
+- Worker-claim semantics such as leases or `SKIP LOCKED` are intentionally left out to keep the implementation small; they would be the next step before running multiple dispatch workers concurrently.

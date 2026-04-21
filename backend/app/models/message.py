@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,10 +19,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-
-if TYPE_CHECKING:
-    from .category import NotificationCategory
-    from .notification_delivery import NotificationAttempt
 
 
 class Message(Base):
@@ -48,7 +44,9 @@ class Message(Base):
         server_default=text("CURRENT_TIMESTAMP"),
     )
 
-    category: Mapped["NotificationCategory"] = relationship(back_populates="messages")
-    notification_attempts: Mapped[list["NotificationAttempt"]] = relationship(
-        back_populates="message"
+    category: Mapped[Any] = relationship(
+        "NotificationCategory", back_populates="messages"
+    )
+    notification_attempts: Mapped[list[Any]] = relationship(
+        "NotificationAttempt", back_populates="message"
     )

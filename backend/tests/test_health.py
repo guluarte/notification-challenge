@@ -1,6 +1,6 @@
 """Tests for database-backed health checks."""
 
-from typing import cast
+from typing import Any
 from unittest.mock import patch
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -20,7 +20,16 @@ class FakeSession:
         self.scalar_result = scalar_result
         self.last_statement: object | None = None
 
-    def scalar(self, statement: object) -> object:
+    def scalar(
+        self,
+        statement: Any,
+        params: Any | None = None,
+        *,
+        execution_options: Any | None = None,
+        bind_arguments: Any | None = None,
+        **kw: Any,
+    ) -> object:
+        del params, execution_options, bind_arguments, kw
         self.last_statement = statement
         return self.scalar_result
 
@@ -28,7 +37,16 @@ class FakeSession:
 class FailingSession:
     """Minimal session double that raises a SQLAlchemy error on query."""
 
-    def scalar(self, _statement: object) -> object:
+    def scalar(
+        self,
+        statement: Any,
+        params: Any | None = None,
+        *,
+        execution_options: Any | None = None,
+        bind_arguments: Any | None = None,
+        **kw: Any,
+    ) -> object:
+        del statement, params, execution_options, bind_arguments, kw
         raise SQLAlchemyError("database unavailable")
 
 
@@ -37,7 +55,7 @@ def test_database_is_healthy_runs_a_select_one_probe() -> None:
 
     fake_session = FakeSession(scalar_result=1)
 
-    assert database_is_healthy(cast(Session, fake_session)) is True
+    assert database_is_healthy(fake_session) is True
 
     assert fake_session.last_statement is not None
 
@@ -45,13 +63,13 @@ def test_database_is_healthy_runs_a_select_one_probe() -> None:
 def test_database_is_healthy_returns_false_on_sqlalchemy_errors() -> None:
     """The DB probe should convert SQLAlchemy failures into an unhealthy result."""
 
-    assert database_is_healthy(cast(Session, FailingSession())) is False
+    assert database_is_healthy(FailingSession()) is False
 
 
 def test_read_health_returns_ok_when_database_check_succeeds() -> None:
     """The route should report healthy when the DB probe succeeds."""
 
-    fake_session = cast(Session, object())
+    fake_session = Session()
 
     with patch("app.api.v1.routes.health.database_is_healthy", return_value=True):
         response = read_health(fake_session)
@@ -66,7 +84,7 @@ def test_read_health_returns_ok_when_database_check_succeeds() -> None:
 def test_read_health_returns_503_when_database_check_fails() -> None:
     """The route should surface database outages as service unavailable."""
 
-    fake_session = cast(Session, object())
+    fake_session = Session()
 
     with patch("app.api.v1.routes.health.database_is_healthy", return_value=False):
         try:

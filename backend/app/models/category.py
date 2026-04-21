@@ -3,17 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Any
 
 from sqlalchemy import DateTime, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-
-if TYPE_CHECKING:
-    from .message import Message
-    from .notification_delivery import NotificationAttempt
-    from .user_category_subscription import UserCategorySubscription
 
 
 class NotificationCategory(Base):
@@ -29,10 +24,10 @@ class NotificationCategory(Base):
         server_default=text("CURRENT_TIMESTAMP"),
     )
 
-    subscriptions: Mapped[list["UserCategorySubscription"]] = relationship(
-        back_populates="category"
+    subscriptions: Mapped[list[Any]] = relationship(
+        "UserCategorySubscription", back_populates="category"
     )
-    messages: Mapped[list["Message"]] = relationship(back_populates="category")
-    notification_attempts: Mapped[list["NotificationAttempt"]] = relationship(
-        back_populates="category"
+    messages: Mapped[list[Any]] = relationship("Message", back_populates="category")
+    notification_attempts: Mapped[list[Any]] = relationship(
+        "NotificationAttempt", back_populates="category"
     )

@@ -1,6 +1,7 @@
 """Reusable database engine, session factory, and health-check helpers."""
 
 import logging
+from typing import Any, Protocol
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
@@ -10,6 +11,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from .config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class DatabaseHealthSession(Protocol):
+    """Small session surface required by the database health probe."""
+
+    def scalar(self, statement: Any) -> Any:
+        """Return a scalar result for the supplied statement."""
+        ...
+
 
 engine: Engine = create_engine(
     settings.database_url,
@@ -25,7 +35,7 @@ SessionFactory: sessionmaker[Session] = sessionmaker(
 )
 
 
-def database_is_healthy(session: Session) -> bool:
+def database_is_healthy(session: DatabaseHealthSession) -> bool:
     """Return whether the configured database session can answer a trivial query."""
 
     try:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -21,12 +21,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-
-if TYPE_CHECKING:
-    from .category import NotificationCategory
-    from .channel import NotificationChannel
-    from .message import Message
-    from .user import User
 
 
 class NotificationAttempt(Base):
@@ -117,11 +111,13 @@ class NotificationAttempt(Base):
         nullable=True,
     )
 
-    message: Mapped["Message"] = relationship(back_populates="notification_attempts")
-    user: Mapped["User"] = relationship(back_populates="notification_attempts")
-    channel: Mapped["NotificationChannel"] = relationship(
-        back_populates="notification_attempts"
+    message: Mapped[Any] = relationship(
+        "Message", back_populates="notification_attempts"
     )
-    category: Mapped["NotificationCategory"] = relationship(
-        back_populates="notification_attempts"
+    user: Mapped[Any] = relationship("User", back_populates="notification_attempts")
+    channel: Mapped[Any] = relationship(
+        "NotificationChannel", back_populates="notification_attempts"
+    )
+    category: Mapped[Any] = relationship(
+        "NotificationCategory", back_populates="notification_attempts"
     )

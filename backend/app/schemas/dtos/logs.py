@@ -13,15 +13,6 @@ from app.models.enums import (
 )
 
 
-class NotificationRecipientDTO(BaseModel):
-    """Recipient details exposed through the log API for challenge verification."""
-
-    id: int
-    name: str
-    email: str
-    phone_number: str
-
-
 class NotificationLogListItemDTO(BaseModel):
     """Single notification attempt row returned by the API."""
 
@@ -29,7 +20,6 @@ class NotificationLogListItemDTO(BaseModel):
     message_id: int
     category: MessageCategoryCode
     body: str
-    user: NotificationRecipientDTO
     channel: NotificationChannelCode
     status: DeliveryStatus
     attempt_number: int

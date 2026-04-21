@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Any
 
 from sqlalchemy import DateTime, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
-
-if TYPE_CHECKING:
-    from .notification_delivery import NotificationAttempt
-    from .user_channel_preference import UserChannelPreference
 
 
 class NotificationChannel(Base):
@@ -28,9 +24,9 @@ class NotificationChannel(Base):
         server_default=text("CURRENT_TIMESTAMP"),
     )
 
-    user_preferences: Mapped[list["UserChannelPreference"]] = relationship(
-        back_populates="channel"
+    user_preferences: Mapped[list[Any]] = relationship(
+        "UserChannelPreference", back_populates="channel"
     )
-    notification_attempts: Mapped[list["NotificationAttempt"]] = relationship(
-        back_populates="channel"
+    notification_attempts: Mapped[list[Any]] = relationship(
+        "NotificationAttempt", back_populates="channel"
     )

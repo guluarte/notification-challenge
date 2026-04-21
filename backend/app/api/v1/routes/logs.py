@@ -10,7 +10,6 @@ from app.schemas.dtos import (
     ErrorResponseDTO,
     NotificationLogListItemDTO,
     NotificationLogListResponseDTO,
-    NotificationRecipientDTO,
 )
 from app.services.types import NotificationLogEntry
 
@@ -25,12 +24,6 @@ def _to_log_list_item(entry: NotificationLogEntry) -> NotificationLogListItemDTO
         message_id=entry.message_id,
         category=MessageCategoryCode(entry.category_code),
         body=entry.body,
-        user=NotificationRecipientDTO(
-            id=entry.user_id,
-            name=entry.user_name,
-            email=entry.user_email,
-            phone_number=entry.user_phone_number,
-        ),
         channel=NotificationChannelCode(entry.channel_code),
         status=entry.status,
         attempt_number=entry.attempt_number,

@@ -7,9 +7,9 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.types import Message, Scope
 
 from app.api.dependencies import get_message_service, get_notification_log_service
 from app.core.exceptions import InfrastructureError, ServiceUnavailableError
@@ -61,24 +61,24 @@ async def _call_app(
     async def receive() -> Message:
         nonlocal body_sent
         if body_sent:
-            return cast(Message, {"type": "http.disconnect"})
+            return {"type": "http.disconnect"}
         body_sent = True
-        return cast(
-            Message,
-            {"type": "http.request", "body": request_body, "more_body": False},
-        )
+        return {"type": "http.request", "body": request_body, "more_body": False}
 
     async def send(message: Message) -> None:
         nonlocal response_status
         if message["type"] == "http.response.start":
-            response_status = cast(int, message["status"])
+            status = message["status"]
+            if isinstance(status, int):
+                response_status = status
         if message["type"] == "http.response.body":
-            response_body.extend(cast(bytes, message.get("body", b"")))
+            body = message.get("body", b"")
+            if isinstance(body, bytes):
+                response_body.extend(body)
 
     try:
-        asgi_app = cast(ASGIApp, app)
         try:
-            await asgi_app(scope, cast(Receive, receive), cast(Send, send))
+            await app(scope, receive, send)
         except Exception:
             if not response_body:
                 raise
@@ -355,12 +355,6 @@ def test_logs_route_returns_log_items() -> None:
                 "message_id": 4,
                 "category": "sports",
                 "body": "Team A won",
-                "user": {
-                    "id": 1,
-                    "name": "Alex",
-                    "email": "alex@example.com",
-                    "phone_number": "+15550000001",
-                },
                 "channel": "email",
                 "status": "sent",
                 "attempt_number": 1,
