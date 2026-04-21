@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.models import NotificationAttempt
@@ -138,7 +138,7 @@ class NotificationAttemptRepository(BaseRepository):
         attempt.processed_at = processed_at
         self.session.flush()
 
-    def list_recent(self) -> list[NotificationLogEntry]:
+    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
         """Return notification attempts sorted from newest to oldest."""
 
         statement = (
@@ -148,9 +148,19 @@ class NotificationAttemptRepository(BaseRepository):
                 NotificationAttempt.attempted_at.desc(),
                 NotificationAttempt.id.desc(),
             )
+            .limit(limit)
+            .offset(offset)
         )
         attempts = self.session.scalars(statement).all()
         return [self._to_log_entry(attempt) for attempt in attempts]
+
+    def count_all(self) -> int:
+        """Return the total number of notification attempt rows."""
+
+        total = self.session.scalar(
+            select(func.count(NotificationAttempt.id)).select_from(NotificationAttempt)
+        )
+        return int(total or 0)
 
     @staticmethod
     def _snapshot(subscriber: ResolvedSubscriber) -> dict[str, Any]:

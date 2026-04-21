@@ -3,6 +3,7 @@
 from .errors import ErrorResponseDTO, ValidationErrorItemDTO, ValidationErrorResponseDTO
 from .health import HealthResponseDTO, HealthState
 from .logs import (
+    NotificationLogPageSize,
     NotificationLogListItemDTO,
     NotificationLogListResponseDTO,
     NotificationLogUserDTO,
@@ -17,6 +18,7 @@ __all__ = [
     "HealthState",
     "NotificationLogListItemDTO",
     "NotificationLogListResponseDTO",
+    "NotificationLogPageSize",
     "NotificationLogUserDTO",
     "ValidationErrorItemDTO",
     "ValidationErrorResponseDTO",

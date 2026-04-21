@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, RadioTower, Rows3 } from 'lucide-react'
-import { type FormEvent, useState } from 'react'
+import type { ComponentProps } from 'react'
+import { useEffect, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { MessageComposerFeedback } from '../components/MessageComposer'
 import { MessageComposer } from '../components/MessageComposer'
 import { NotificationLogList } from '../components/NotificationLogList'
-import { TagPanel } from '../components/TagPanel'
 import {
 	notificationCategories,
 	notificationChannels,
@@ -21,9 +21,15 @@ import { getAppConfig } from '../services/appConfig'
 import {
 	ApiRequestError,
 	type CreateMessageResponse,
+	type LogPageSize,
 	type MessageCategoryCode,
 	type NotificationLogItem,
 } from '../services/notificationApi'
+
+const LOG_PAGE_SIZE_OPTIONS: LogPageSize[] = [10, 50, 100]
+type FormSubmitEvent = Parameters<
+	NonNullable<ComponentProps<'form'>['onSubmit']>
+>[0]
 
 function isMessageCategoryCode(value: string): value is MessageCategoryCode {
 	return notificationCategories.some(
@@ -44,9 +50,8 @@ function getErrorMessage(error: unknown, fallbackMessage: string): string {
 }
 
 export function SetupPage() {
-	const { apiBaseUrl, appName } = getAppConfig()
+	const { appName } = getAppConfig()
 	const queryClient = useQueryClient()
-	const logsQuery = useNotificationLogs()
 	const createMessageMutation = useCreateMessageMutation()
 	const [category, setCategory] = useState<MessageCategoryCode>(
 		notificationCategories[0].code,
@@ -56,8 +61,17 @@ export function SetupPage() {
 	const [feedback, setFeedback] = useState<MessageComposerFeedback | null>(null)
 	const [lastDispatchSummary, setLastDispatchSummary] =
 		useState<CreateMessageResponse | null>(null)
+	const [logPageSize, setLogPageSize] = useState<LogPageSize>(10)
+	const [currentLogPage, setCurrentLogPage] = useState(1)
+	const logOffset = (currentLogPage - 1) * logPageSize
+	const logsQuery = useNotificationLogs({
+		limit: logPageSize,
+		offset: logOffset,
+	})
 
-	const logItems: NotificationLogItem[] = logsQuery.data ?? []
+	const logItems: NotificationLogItem[] = logsQuery.data?.items ?? []
+	const totalLogItems = logsQuery.data?.total ?? 0
+	const totalLogPages = Math.max(1, Math.ceil(totalLogItems / logPageSize))
 	const sentAttempts = logItems.filter((item) => item.status === 'sent').length
 	const failedAttempts = logItems.filter(
 		(item) => item.status === 'failed',
@@ -69,9 +83,13 @@ export function SetupPage() {
 		? getErrorMessage(logsQuery.error, 'The log history could not be loaded.')
 		: null
 
-	async function handleSubmit(
-		event: FormEvent<HTMLFormElement>,
-	): Promise<void> {
+	useEffect(() => {
+		if (currentLogPage > totalLogPages) {
+			setCurrentLogPage(totalLogPages)
+		}
+	}, [currentLogPage, totalLogPages])
+
+	async function handleSubmit(event: FormSubmitEvent): Promise<void> {
 		event.preventDefault()
 
 		const normalizedBody = body.trim()
@@ -91,6 +109,7 @@ export function SetupPage() {
 			})
 
 			setBody('')
+			setCurrentLogPage(1)
 			setLastDispatchSummary(result)
 			setFeedback({
 				tone: 'success',
@@ -122,8 +141,8 @@ export function SetupPage() {
 	return (
 		<main className="relative min-h-screen overflow-hidden bg-[linear-gradient(145deg,#f8f1e6_0%,#dcc09c_52%,#f7f4ef_100%)]">
 			<div className="pointer-events-none absolute inset-0 overflow-hidden">
-				<div className="animate-float-slow absolute left-[-8rem] top-[-6rem] h-64 w-64 rounded-full bg-amber-200/50 blur-3xl" />
-				<div className="animate-float-slow animation-delay-strong absolute right-[-5rem] top-24 h-72 w-72 rounded-full bg-teal-200/45 blur-3xl" />
+				<div className="animate-float-slow absolute -left-32 -top-24 h-64 w-64 rounded-full bg-amber-200/50 blur-3xl" />
+				<div className="animate-float-slow animation-delay-strong absolute -right-20 top-24 h-72 w-72 rounded-full bg-teal-200/45 blur-3xl" />
 				<div className="animate-float-slow animation-delay-soft absolute bottom-10 left-1/3 h-80 w-80 rounded-full bg-rose-100/60 blur-3xl" />
 			</div>
 
@@ -186,6 +205,22 @@ export function SetupPage() {
 								</p>
 							</div>
 						</div>
+						<div className="mt-6 rounded-[1.5rem] border border-white/60 bg-white/70 p-4 shadow-sm">
+							<p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
+								Channels
+							</p>
+							<div className="mt-3 flex flex-wrap gap-2">
+								{notificationChannels.map((channel) => (
+									<Badge
+										key={channel.code}
+										variant="outline"
+										className="rounded-full border-stone-300 bg-white/90 px-3 py-1 text-stone-700"
+									>
+										{channel.label}
+									</Badge>
+								))}
+							</div>
+						</div>
 					</div>
 
 					<Card className="animate-in fade-in-0 slide-in-from-top-4 border-0 bg-stone-950 text-stone-50 shadow-[0_28px_100px_rgba(35,20,9,0.2)] xl:rounded-[2rem]">
@@ -204,7 +239,7 @@ export function SetupPage() {
 										Audit rows
 									</p>
 									<p className="mt-3 text-4xl font-semibold text-white">
-										{logItems.length}
+										{totalLogItems}
 									</p>
 								</div>
 								<div className="rounded-[1.4rem] border border-white/10 bg-white/6 p-4">
@@ -236,7 +271,13 @@ export function SetupPage() {
 					</Card>
 				</section>
 
-				<section className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_360px]">
+				<section
+					className={
+						lastDispatchSummary
+							? 'grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_360px]'
+							: 'grid gap-6'
+					}
+				>
 					<div className="grid gap-6">
 						<MessageComposer
 							categories={notificationCategories}
@@ -264,54 +305,34 @@ export function SetupPage() {
 							isLoading={logsQuery.isPending}
 							errorMessage={logErrorMessage}
 							isRefreshing={logsQuery.isFetching}
+							pageSize={logPageSize}
+							pageSizeOptions={LOG_PAGE_SIZE_OPTIONS}
+							currentPage={currentLogPage}
+							totalPages={totalLogPages}
+							totalItems={totalLogItems}
+							offset={logOffset}
+							onPageSizeChange={(nextPageSize) => {
+								setLogPageSize(nextPageSize)
+								setCurrentLogPage(1)
+							}}
+							onPreviousPage={() => {
+								setCurrentLogPage((previousPage) =>
+									Math.max(1, previousPage - 1),
+								)
+							}}
+							onNextPage={() => {
+								setCurrentLogPage((previousPage) =>
+									Math.min(totalLogPages, previousPage + 1),
+								)
+							}}
 							onRefresh={() => {
 								void logsQuery.refetch()
 							}}
 						/>
 					</div>
 
-					<aside className="grid gap-6">
-						<Card className="border-0 bg-white/74 shadow-[0_18px_60px_rgba(75,46,16,0.1)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
-							<CardHeader className="gap-3">
-								<Badge
-									variant="outline"
-									className="w-fit rounded-full border-stone-300 bg-stone-50/90 text-stone-700"
-								>
-									Runtime
-								</Badge>
-								<CardTitle className="text-xl tracking-tight text-stone-950">
-									Environment
-								</CardTitle>
-							</CardHeader>
-							<CardContent className="grid gap-4 text-sm">
-								<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-									<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-										Frontend
-									</p>
-									<p className="mt-2 font-medium text-stone-900">
-										React + Vite + Tailwind + shadcn/ui
-									</p>
-								</div>
-								<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-									<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-										Server state
-									</p>
-									<p className="mt-2 font-medium text-stone-900">
-										TanStack Query
-									</p>
-								</div>
-								<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-									<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-										Backend API
-									</p>
-									<p className="mt-2 break-all font-medium text-stone-900">
-										{apiBaseUrl}
-									</p>
-								</div>
-							</CardContent>
-						</Card>
-
-						{lastDispatchSummary ? (
+					{lastDispatchSummary ? (
+						<aside className="grid gap-6">
 							<Card className="border-0 bg-white/74 shadow-[0_18px_60px_rgba(75,46,16,0.1)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
 								<CardHeader className="gap-3">
 									<Badge className="w-fit rounded-full bg-emerald-100 text-emerald-900">
@@ -359,21 +380,8 @@ export function SetupPage() {
 									</div>
 								</CardContent>
 							</Card>
-						) : null}
-
-						<div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-1">
-							<TagPanel
-								items={notificationCategories.map(
-									(categoryOption) => categoryOption.label,
-								)}
-								title="Categories"
-							/>
-							<TagPanel
-								items={notificationChannels.map((channel) => channel.label)}
-								title="Channels"
-							/>
-						</div>
-					</aside>
+						</aside>
+					) : null}
 				</section>
 			</div>
 		</main>

@@ -2,18 +2,22 @@ import { useQuery } from '@tanstack/react-query'
 
 import {
 	listNotificationLogs,
-	type NotificationLogItem,
+	type NotificationLogListParams,
+	type NotificationLogListResponse,
 } from '../services/notificationApi'
 
 export const notificationLogsQueryKey = ['notification-logs']
 
-function fetchNotificationLogs(): Promise<NotificationLogItem[]> {
-	return listNotificationLogs()
+function fetchNotificationLogs(
+	params: NotificationLogListParams,
+): Promise<NotificationLogListResponse> {
+	return listNotificationLogs(params)
 }
 
-export function useNotificationLogs() {
+export function useNotificationLogs(params: NotificationLogListParams) {
 	return useQuery({
-		queryKey: notificationLogsQueryKey,
-		queryFn: fetchNotificationLogs,
+		queryKey: [...notificationLogsQueryKey, params],
+		queryFn: () => fetchNotificationLogs(params),
+		placeholderData: (previousData) => previousData,
 	})
 }

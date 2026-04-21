@@ -1,4 +1,4 @@
-import { Clock3, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock3, RefreshCw } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,12 +11,20 @@ import {
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from '@/components/ui/select'
+import {
 	categoryLabelsByCode,
 	channelLabelsByCode,
 	statusLabelsByCode,
 } from '@/constants/notificationCatalog'
 import type {
 	DeliveryStatus,
+	LogPageSize,
 	NotificationLogItem,
 } from '../services/notificationApi'
 
@@ -50,7 +58,29 @@ interface NotificationLogListProps {
 	isLoading: boolean
 	errorMessage: string | null
 	isRefreshing: boolean
+	pageSize: LogPageSize
+	pageSizeOptions: LogPageSize[]
+	currentPage: number
+	totalPages: number
+	totalItems: number
+	offset: number
+	onPageSizeChange: (pageSize: LogPageSize) => void
+	onPreviousPage: () => void
+	onNextPage: () => void
 	onRefresh: () => void
+}
+
+function parseLogPageSize(
+	value: string,
+	pageSizeOptions: LogPageSize[],
+): LogPageSize | null {
+	for (const pageSizeOption of pageSizeOptions) {
+		if (pageSizeOption.toString() === value) {
+			return pageSizeOption
+		}
+	}
+
+	return null
 }
 
 export function NotificationLogList({
@@ -58,8 +88,22 @@ export function NotificationLogList({
 	isLoading,
 	errorMessage,
 	isRefreshing,
+	pageSize,
+	pageSizeOptions,
+	currentPage,
+	totalPages,
+	totalItems,
+	offset,
+	onPageSizeChange,
+	onPreviousPage,
+	onNextPage,
 	onRefresh,
 }: NotificationLogListProps) {
+	const firstVisibleItem = totalItems === 0 ? 0 : offset + 1
+	const lastVisibleItem = Math.min(offset + items.length, totalItems)
+	const hasPreviousPage = currentPage > 1
+	const hasNextPage = currentPage < totalPages
+
 	return (
 		<Card className="border-0 bg-white/78 shadow-[0_24px_90px_rgba(75,46,16,0.12)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
 			<CardHeader className="gap-4">
@@ -79,22 +123,86 @@ export function NotificationLogList({
 							sorted from newest to oldest.
 						</CardDescription>
 					</div>
-					<Button
-						type="button"
-						variant="outline"
-						onClick={onRefresh}
-						disabled={isRefreshing}
-						className="h-11 rounded-full border-stone-300 bg-white/90 px-5 text-stone-900 hover:bg-stone-100"
-					>
-						<RefreshCw
-							className={isRefreshing ? 'size-4 animate-spin' : 'size-4'}
-						/>
-						{isRefreshing ? 'Refreshing...' : 'Refresh logs'}
-					</Button>
+					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+						<div className="flex h-11 items-center gap-2 rounded-full border border-stone-300 bg-white/90 px-3">
+							<span className="text-xs font-semibold uppercase text-stone-500">
+								Rows
+							</span>
+							<Select
+								value={pageSize.toString()}
+								onValueChange={(value) => {
+									const nextPageSize = parseLogPageSize(value, pageSizeOptions)
+									if (nextPageSize !== null) {
+										onPageSizeChange(nextPageSize)
+									}
+								}}
+							>
+								<SelectTrigger
+									aria-label="Rows per page"
+									className="h-8 w-20 rounded-full border-stone-200 bg-stone-50 px-3 text-stone-900 shadow-none"
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent className="rounded-2xl border-stone-200 bg-white/95 backdrop-blur">
+									{pageSizeOptions.map((pageSizeOption) => (
+										<SelectItem
+											key={pageSizeOption}
+											value={pageSizeOption.toString()}
+										>
+											{pageSizeOption}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={onRefresh}
+							disabled={isRefreshing}
+							className="h-11 rounded-full border-stone-300 bg-white/90 px-5 text-stone-900 hover:bg-stone-100"
+						>
+							<RefreshCw
+								className={isRefreshing ? 'size-4 animate-spin' : 'size-4'}
+							/>
+							{isRefreshing ? 'Refreshing...' : 'Refresh logs'}
+						</Button>
+					</div>
 				</div>
 			</CardHeader>
 
 			<CardContent className="grid gap-4">
+				<div className="flex flex-col gap-3 rounded-[1.4rem] border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-stone-600 sm:flex-row sm:items-center sm:justify-between">
+					<p>
+						Showing {firstVisibleItem}-{lastVisibleItem} of {totalItems}
+					</p>
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={onPreviousPage}
+							disabled={!hasPreviousPage}
+							className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
+						>
+							<ChevronLeft className="size-4" />
+							Previous
+						</Button>
+						<span className="min-w-24 text-center font-medium text-stone-900">
+							Page {currentPage} of {totalPages}
+						</span>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={onNextPage}
+							disabled={!hasNextPage}
+							className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
+						>
+							Next
+							<ChevronRight className="size-4" />
+						</Button>
+					</div>
+				</div>
+
 				{errorMessage ? (
 					<div
 						className="animate-in fade-in-0 slide-in-from-bottom-2 rounded-[1.4rem] border border-red-300/70 bg-red-50/90 px-4 py-3 text-red-900 shadow-sm"

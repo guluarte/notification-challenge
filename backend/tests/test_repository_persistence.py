@@ -361,7 +361,7 @@ def test_notification_attempt_repository_maps_recent_logs() -> None:
         "scalars",
         return_value=FakeScalarResult([attempt]),
     ) as scalars_mock:
-        logs = repository.list_recent()
+        logs = repository.list_recent(limit=10, offset=20)
 
     assert logs == [
         NotificationLogEntry(
@@ -387,4 +387,18 @@ def test_notification_attempt_repository_maps_recent_logs() -> None:
         )
     ]
     scalars_mock.assert_called_once()
+    session.close()
+
+
+def test_notification_attempt_repository_counts_logs() -> None:
+    """The repository should expose the total audit row count for pagination."""
+
+    session = Session()
+    repository = NotificationAttemptRepository(session)
+
+    with patch.object(session, "scalar", return_value=42) as scalar_mock:
+        total = repository.count_all()
+
+    assert total == 42
+    scalar_mock.assert_called_once()
     session.close()

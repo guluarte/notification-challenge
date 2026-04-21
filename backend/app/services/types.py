@@ -108,6 +108,16 @@ class NotificationLogEntry:
     provider_reference: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class NotificationLogPage:
+    """Paginated audit-log rows returned by the service layer."""
+
+    items: list[NotificationLogEntry]
+    total: int
+    limit: int
+    offset: int
+
+
 class SessionProtocol(Protocol):
     """Behavior the message service requires from a session."""
 
@@ -280,6 +290,10 @@ class NotificationDispatcherProtocol(Protocol):
 class NotificationLogRepositoryProtocol(Protocol):
     """Repository contract for audit log listing."""
 
-    def list_recent(self) -> list[NotificationLogEntry]:
+    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
         """Return recent notification logs."""
+        ...
+
+    def count_all(self) -> int:
+        """Return the total number of notification logs."""
         ...

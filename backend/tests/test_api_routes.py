@@ -15,13 +15,18 @@ from app.api.dependencies import get_message_service, get_notification_log_servi
 from app.core.exceptions import InfrastructureError, ServiceUnavailableError
 from app.main import create_app
 from app.models.enums import DeliveryStatus
-from app.services.types import MessageCreationResult, NotificationLogEntry
+from app.services.types import (
+    MessageCreationResult,
+    NotificationLogEntry,
+    NotificationLogPage,
+)
 
 
 async def _call_app(
     *,
     method: str,
     path: str,
+    query_string: str = "",
     json_body: dict[str, object] | None = None,
     app_overrides: dict[Callable[..., Any], Callable[..., Any]] | None = None,
 ) -> tuple[int, dict[str, Any]]:
@@ -39,6 +44,10 @@ async def _call_app(
         headers.append((b"content-type", b"application/json"))
         headers.append((b"content-length", str(len(request_body)).encode("ascii")))
 
+    raw_path = path
+    if query_string != "":
+        raw_path = f"{path}?{query_string}"
+
     scope: Scope = {
         "type": "http",
         "http_version": "1.1",
@@ -46,8 +55,8 @@ async def _call_app(
         "method": method,
         "scheme": "http",
         "path": path,
-        "raw_path": path.encode("ascii"),
-        "query_string": b"",
+        "raw_path": raw_path.encode("ascii"),
+        "query_string": query_string.encode("ascii"),
         "headers": headers,
         "client": ("testclient", 50000),
         "server": ("testserver", 80),
@@ -122,13 +131,18 @@ class FakeNotificationLogService:
     ) -> None:
         self.entries = entries
         self.error = error
-        self.calls = 0
+        self.calls: list[tuple[int, int]] = []
 
-    def list_logs(self) -> list[NotificationLogEntry]:
-        self.calls += 1
+    def list_logs(self, *, limit: int = 10, offset: int = 0) -> NotificationLogPage:
+        self.calls.append((limit, offset))
         if self.error is not None:
             raise self.error
-        return self.entries
+        return NotificationLogPage(
+            items=self.entries,
+            total=25,
+            limit=limit,
+            offset=offset,
+        )
 
 
 def _message_service_override(
@@ -373,9 +387,33 @@ def test_logs_route_returns_log_items() -> None:
                 "failure_reason": None,
                 "provider_reference": "email-4-1",
             }
-        ]
+        ],
+        "total": 25,
+        "limit": 10,
+        "offset": 0,
     }
-    assert service.calls == 1
+    assert service.calls == [(10, 0)]
+
+
+def test_logs_route_accepts_pagination_query_parameters() -> None:
+    """The logs route should pass page sizing through to the service layer."""
+
+    service = FakeNotificationLogService(entries=[])
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="GET",
+            path="/v1/logs",
+            query_string="limit=50&offset=100",
+            app_overrides={
+                get_notification_log_service: _log_service_override(service)
+            },
+        )
+    )
+
+    assert status_code == 200
+    assert payload == {"items": [], "total": 25, "limit": 50, "offset": 100}
+    assert service.calls == [(50, 100)]
 
 
 def test_logs_route_maps_infrastructure_errors() -> None:

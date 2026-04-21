@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import IntEnum
 
 from pydantic import BaseModel
 
@@ -11,6 +12,14 @@ from app.models.enums import (
     MessageCategoryCode,
     NotificationChannelCode,
 )
+
+
+class NotificationLogPageSize(IntEnum):
+    """Supported notification log page sizes."""
+
+    TEN = 10
+    FIFTY = 50
+    ONE_HUNDRED = 100
 
 
 class NotificationLogUserDTO(BaseModel):
@@ -47,3 +56,6 @@ class NotificationLogListResponseDTO(BaseModel):
     """Collection of delivery log rows."""
 
     items: list[NotificationLogListItemDTO]
+    total: int
+    limit: NotificationLogPageSize
+    offset: int

@@ -3,6 +3,7 @@ import { getAppConfig } from './appConfig'
 export type MessageCategoryCode = 'sports' | 'finance' | 'movies'
 export type NotificationChannelCode = 'sms' | 'email' | 'push'
 export type DeliveryStatus = 'pending' | 'sent' | 'failed'
+export type LogPageSize = 10 | 50 | 100
 
 export interface CreateMessagePayload {
 	category: MessageCategoryCode
@@ -46,8 +47,16 @@ export interface NotificationLogItem {
 	provider_reference: string | null
 }
 
-interface NotificationLogListResponse {
+export interface NotificationLogListParams {
+	limit: LogPageSize
+	offset: number
+}
+
+export interface NotificationLogListResponse {
 	items: NotificationLogItem[]
+	total: number
+	limit: LogPageSize
+	offset: number
 }
 
 interface ValidationIssue {
@@ -159,21 +168,21 @@ async function readCreateMessageResponse(
 }
 
 export async function listNotificationLogs(
+	params: NotificationLogListParams,
 	fetchImpl: typeof fetch = globalThis.fetch,
-): Promise<NotificationLogItem[]> {
-	const response = await fetchImpl(buildApiUrl('/logs'))
+): Promise<NotificationLogListResponse> {
+	const searchParams = new URLSearchParams({
+		limit: params.limit.toString(),
+		offset: params.offset.toString(),
+	})
+	const response = await fetchImpl(
+		buildApiUrl(`/logs?${searchParams.toString()}`),
+	)
 	if (!response.ok) {
 		await throwApiError(response)
 	}
 
-	const payload = await readNotificationLogListResponse(response)
-
-	return payload.items
-		.slice()
-		.sort(
-			(left, right) =>
-				Date.parse(right.attempted_at) - Date.parse(left.attempted_at),
-		)
+	return readNotificationLogListResponse(response)
 }
 
 export async function submitMessage(

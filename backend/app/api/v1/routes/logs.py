@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Query
 
 from app.api.dependencies import NotificationLogServiceDep
 from app.models.enums import MessageCategoryCode, NotificationChannelCode
@@ -10,6 +12,7 @@ from app.schemas.dtos import (
     ErrorResponseDTO,
     NotificationLogListItemDTO,
     NotificationLogListResponseDTO,
+    NotificationLogPageSize,
     NotificationLogUserDTO,
 )
 from app.services.types import NotificationLogEntry
@@ -51,8 +54,24 @@ def _to_log_list_item(entry: NotificationLogEntry) -> NotificationLogListItemDTO
     responses={500: {"model": ErrorResponseDTO}},
     summary="List notification attempt logs",
 )
-def list_logs(log_service: NotificationLogServiceDep) -> NotificationLogListResponseDTO:
+def list_logs(
+    log_service: NotificationLogServiceDep,
+    limit: Annotated[
+        NotificationLogPageSize,
+        Query(description="Maximum number of log rows to return."),
+    ] = NotificationLogPageSize.TEN,
+    offset: Annotated[
+        int,
+        Query(ge=0, description="Number of newest log rows to skip."),
+    ] = 0,
+) -> NotificationLogListResponseDTO:
     """Return notification attempt logs ordered from newest to oldest."""
 
-    items = [_to_log_list_item(entry) for entry in log_service.list_logs()]
-    return NotificationLogListResponseDTO(items=items)
+    page = log_service.list_logs(limit=limit.value, offset=offset)
+    items = [_to_log_list_item(entry) for entry in page.items]
+    return NotificationLogListResponseDTO(
+        items=items,
+        total=page.total,
+        limit=limit,
+        offset=page.offset,
+    )

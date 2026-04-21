@@ -1,5 +1,5 @@
 import { SendHorizontal, Sparkles } from 'lucide-react'
-import type { FormEvent } from 'react'
+import type { ComponentProps } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import type { MessageCategoryCode } from '../services/notificationApi'
 
+type FormSubmitHandler = NonNullable<ComponentProps<'form'>['onSubmit']>
+
 export interface MessageComposerFeedback {
 	tone: 'success' | 'error'
 	title: string
@@ -35,7 +37,7 @@ interface MessageComposerProps {
 	feedback: MessageComposerFeedback | null
 	onCategoryChange: (category: string) => void
 	onBodyChange: (body: string) => void
-	onSubmit: (event: FormEvent<HTMLFormElement>) => void
+	onSubmit: FormSubmitHandler
 }
 
 export function MessageComposer({

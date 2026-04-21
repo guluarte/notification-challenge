@@ -38,12 +38,14 @@ Supported channels:
 
 - `GET /v1/health`
 - `POST /v1/messages`
-- `GET /v1/logs`
+- `GET /v1/logs?limit=10&offset=0`
 
 Delivery logs include enough information to verify delivery to subscribers. Each
 log item exposes the message details, channel, status, timestamps, errors when
 present, and a `user` object with the recipient id, name, email, and phone
-number captured at dispatch time.
+number captured at dispatch time. Log history is paginated server-side with page
+sizes of `10`, `50`, or `100`, and responses include `items`, `total`, `limit`,
+and `offset`.
 
 Example request:
 
@@ -131,7 +133,7 @@ The Bruno collection validates the public API from the outside in:
 - `GET /v1/health`
 - `POST /v1/messages` happy path
 - `POST /v1/messages` validation failure for blank bodies
-- `GET /v1/logs` newest-first audit history after message submission
+- `GET /v1/logs?limit=10&offset=0` newest-first audit history after message submission
 
 Intentionally uncovered areas are limited to framework-generated and forced infrastructure failure branches that are already covered more deterministically by backend unit tests and dependency-override route tests.
 

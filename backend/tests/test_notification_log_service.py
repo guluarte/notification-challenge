@@ -17,18 +17,27 @@ class FakeNotificationAttemptRepository:
 
     def __init__(self, entries: list[NotificationLogEntry]) -> None:
         self.entries = entries
-        self.calls = 0
+        self.list_calls: list[tuple[int, int]] = []
+        self.count_calls = 0
 
-    def list_recent(self) -> list[NotificationLogEntry]:
-        self.calls += 1
+    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
+        self.list_calls.append((limit, offset))
         return self.entries
+
+    def count_all(self) -> int:
+        self.count_calls += 1
+        return len(self.entries)
 
 
 class FailingNotificationAttemptRepository:
     """Attempt repository double that simulates database failures."""
 
-    def list_recent(self) -> list[NotificationLogEntry]:
+    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
+        del limit, offset
         raise SQLAlchemyError("database unavailable")
+
+    def count_all(self) -> int:
+        raise AssertionError("count_all should not run after list_recent fails")
 
 
 def test_notification_log_service_returns_repository_results() -> None:
@@ -60,10 +69,14 @@ def test_notification_log_service_returns_repository_results() -> None:
     repository = FakeNotificationAttemptRepository(entries=entries)
     service = NotificationLogService(attempt_repository=repository)
 
-    result = service.list_logs()
+    result = service.list_logs(limit=50, offset=100)
 
-    assert result == entries
-    assert repository.calls == 1
+    assert result.items == entries
+    assert result.total == 1
+    assert result.limit == 50
+    assert result.offset == 100
+    assert repository.list_calls == [(50, 100)]
+    assert repository.count_calls == 1
 
 
 def test_notification_log_service_wraps_database_failures() -> None:
