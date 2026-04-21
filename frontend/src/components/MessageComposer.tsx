@@ -1,4 +1,5 @@
 import { SendHorizontal, Sparkles } from 'lucide-react'
+import type { FormEvent } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,22 +18,26 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import type { MessageCategoryCode } from '../services/notificationApi'
 
-/**
- * @typedef {import('../services/notificationApi').MessageCategoryCode} MessageCategoryCode
- *
- * @param {{
- *   categories: { code: MessageCategoryCode; label: string }[]
- *   selectedCategory: MessageCategoryCode
- *   body: string
- *   bodyError?: string
- *   isSubmitting: boolean
- *   feedback: { tone: 'success' | 'error'; title: string; detail: string } | null
- *   onCategoryChange: (category: MessageCategoryCode) => void
- *   onBodyChange: (body: string) => void
- *   onSubmit: (event: import('react').FormEvent<HTMLFormElement>) => void
- * }} props
- */
+export interface MessageComposerFeedback {
+	tone: 'success' | 'error'
+	title: string
+	detail: string
+}
+
+interface MessageComposerProps {
+	categories: { code: MessageCategoryCode; label: string }[]
+	selectedCategory: MessageCategoryCode
+	body: string
+	bodyError?: string
+	isSubmitting: boolean
+	feedback: MessageComposerFeedback | null
+	onCategoryChange: (category: string) => void
+	onBodyChange: (body: string) => void
+	onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}
+
 export function MessageComposer({
 	categories,
 	selectedCategory,
@@ -43,7 +48,7 @@ export function MessageComposer({
 	onCategoryChange,
 	onBodyChange,
 	onSubmit,
-}) {
+}: MessageComposerProps) {
 	const feedbackClassName =
 		feedback?.tone === 'error'
 			? 'border-red-300/70 bg-red-50/90 text-red-900'

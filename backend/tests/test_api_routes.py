@@ -355,6 +355,12 @@ def test_logs_route_returns_log_items() -> None:
                 "message_id": 4,
                 "category": "sports",
                 "body": "Team A won",
+                "user": {
+                    "id": 1,
+                    "name": "Alex",
+                    "email": "alex@example.com",
+                    "phone_number": "+15550000001",
+                },
                 "channel": "email",
                 "status": "sent",
                 "attempt_number": 1,

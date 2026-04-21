@@ -20,11 +20,19 @@ export interface CreateMessageResponse {
 	created_at: string
 }
 
+export interface NotificationLogUser {
+	id: number
+	name: string
+	email: string
+	phone_number: string
+}
+
 export interface NotificationLogItem {
 	attempt_id: number
 	message_id: number
 	category: MessageCategoryCode
 	body: string
+	user: NotificationLogUser
 	channel: NotificationChannelCode
 	status: DeliveryStatus
 	attempt_number: number

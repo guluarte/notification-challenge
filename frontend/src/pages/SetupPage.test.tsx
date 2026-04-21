@@ -25,12 +25,7 @@ function renderSetupPage() {
 	)
 }
 
-/**
- * @param {unknown} body
- * @param {ResponseInit} [init]
- * @returns {Response}
- */
-function jsonResponse(body, init = {}) {
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 	return new Response(JSON.stringify(body), {
 		status: 200,
 		headers: {
@@ -55,6 +50,12 @@ describe('SetupPage', () => {
 								message_id: 4,
 								category: 'sports',
 								body: 'Team A won the championship',
+								user: {
+									id: 1,
+									name: 'Alex Morgan',
+									email: 'alex.morgan@example.com',
+									phone_number: '+15550000001',
+								},
 								channel: 'email',
 								status: 'sent',
 								attempt_number: 1,
@@ -114,10 +115,10 @@ describe('SetupPage', () => {
 				name: 'Team A won the championship',
 			}),
 		).toBeInTheDocument()
-		expect(screen.getByText('Details withheld')).toBeInTheDocument()
-		expect(
-			screen.getByText('PII is kept server-side in the audit record.'),
-		).toBeInTheDocument()
+		expect(screen.getByText('Alex Morgan')).toBeInTheDocument()
+		expect(screen.getByText('ID #1')).toBeInTheDocument()
+		expect(screen.getByText('alex.morgan@example.com')).toBeInTheDocument()
+		expect(screen.getByText('+15550000001')).toBeInTheDocument()
 		expect(screen.getByText('email-4-1')).toBeInTheDocument()
 	})
 
@@ -173,6 +174,12 @@ describe('SetupPage', () => {
 							message_id: 12,
 							category: 'sports',
 							body: 'Team A won',
+							user: {
+								id: 3,
+								name: 'Sam Rivera',
+								email: 'sam.rivera@example.com',
+								phone_number: '+15550001003',
+							},
 							channel: 'push',
 							status: 'sent',
 							attempt_number: 1,
@@ -202,7 +209,7 @@ describe('SetupPage', () => {
 		await screen.findByText(
 			'Delivered 2 of 3 attempts across 2 subscribed users.',
 		)
-		expect(await screen.findByText('Details withheld')).toBeInTheDocument()
+		expect(await screen.findByText('Sam Rivera')).toBeInTheDocument()
 		expect(await screen.findByText('push-12-1')).toBeInTheDocument()
 		await waitFor(() => {
 			expect(fetchMock).toHaveBeenCalledTimes(3)
@@ -281,5 +288,8 @@ describe('SetupPage', () => {
 		expect(alert).toHaveTextContent(
 			'The notification logs could not be loaded.',
 		)
+		expect(
+			screen.queryByText('No delivery attempts yet'),
+		).not.toBeInTheDocument()
 	})
 })

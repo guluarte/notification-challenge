@@ -15,21 +15,17 @@ import {
 	channelLabelsByCode,
 	statusLabelsByCode,
 } from '@/constants/notificationCatalog'
+import type {
+	DeliveryStatus,
+	NotificationLogItem,
+} from '../services/notificationApi'
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
 	dateStyle: 'medium',
 	timeStyle: 'short',
 })
 
-/**
- * @typedef {import('../services/notificationApi').NotificationLogItem} NotificationLogItem
- */
-
-/**
- * @param {string | null | undefined} value
- * @returns {string}
- */
-function formatTimestamp(value) {
+function formatTimestamp(value: string | null | undefined): string {
 	if (!value) {
 		return 'Not processed yet'
 	}
@@ -37,11 +33,7 @@ function formatTimestamp(value) {
 	return dateTimeFormatter.format(new Date(value))
 }
 
-/**
- * @param {'pending' | 'sent' | 'failed'} status
- * @returns {string}
- */
-function getStatusClassName(status) {
+function getStatusClassName(status: DeliveryStatus): string {
 	if (status === 'sent') {
 		return 'bg-emerald-100 text-emerald-900 ring-1 ring-emerald-900/10'
 	}
@@ -53,22 +45,21 @@ function getStatusClassName(status) {
 	return 'bg-amber-100 text-amber-900 ring-1 ring-amber-900/10'
 }
 
-/**
- * @param {{
- *   items: NotificationLogItem[]
- *   isLoading: boolean
- *   errorMessage: string | null
- *   isRefreshing: boolean
- *   onRefresh: () => void
- * }} props
- */
+interface NotificationLogListProps {
+	items: NotificationLogItem[]
+	isLoading: boolean
+	errorMessage: string | null
+	isRefreshing: boolean
+	onRefresh: () => void
+}
+
 export function NotificationLogList({
 	items,
 	isLoading,
 	errorMessage,
 	isRefreshing,
 	onRefresh,
-}) {
+}: NotificationLogListProps) {
 	return (
 		<Card className="border-0 bg-white/78 shadow-[0_24px_90px_rgba(75,46,16,0.12)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
 			<CardHeader className="gap-4">
@@ -123,7 +114,7 @@ export function NotificationLogList({
 					</div>
 				) : null}
 
-				{!isLoading && items.length === 0 ? (
+				{!isLoading && !errorMessage && items.length === 0 ? (
 					<div className="rounded-[1.6rem] border border-dashed border-stone-300 bg-stone-100/70 px-6 py-8 text-center">
 						<p className="font-medium text-stone-900">
 							No delivery attempts yet
@@ -185,11 +176,13 @@ export function NotificationLogList({
 										</dt>
 										<dd className="space-y-1 text-stone-700">
 											<p className="font-medium text-stone-900">
-												Details withheld
+												{item.user.name}
 											</p>
-											<p className="text-stone-500">
-												PII is kept server-side in the audit record.
+											<p className="text-stone-500">ID #{item.user.id}</p>
+											<p className="break-all text-stone-500">
+												{item.user.email}
 											</p>
+											<p className="text-stone-500">{item.user.phone_number}</p>
 										</dd>
 									</div>
 									<div className="space-y-1">

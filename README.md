@@ -40,6 +40,11 @@ Supported channels:
 - `POST /v1/messages`
 - `GET /v1/logs`
 
+Delivery logs include enough information to verify delivery to subscribers. Each
+log item exposes the message details, channel, status, timestamps, errors when
+present, and a `user` object with the recipient id, name, email, and phone
+number captured at dispatch time.
+
 Example request:
 
 ```json
@@ -213,4 +218,5 @@ The demo data is loaded by `python -m app.seeders.run`, which seeds the normaliz
 - Dispatch still runs in-process for the challenge to keep setup and review simple.
 - The dispatcher now separates queueing from execution, so a worker can process pending attempts later without changing repository or strategy logic.
 - `notification_attempts` stores pending, processing, and finalization timestamps plus `next_retry_at`, which provides the lifecycle metadata needed for retries and queue-based execution later.
+- `/v1/logs` returns seeded recipient contact details so the demo audit history can verify exactly who received each notification. In production this endpoint would require authentication, role-based access, access auditing, and field masking or redaction for viewers who do not need full PII.
 - Worker-claim semantics such as leases or `SKIP LOCKED` are intentionally left out to keep the implementation small; they would be the next step before running multiple dispatch workers concurrently.

@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, RadioTower, Rows3 } from 'lucide-react'
-import { useState } from 'react'
+import { type FormEvent, useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { MessageComposerFeedback } from '../components/MessageComposer'
 import { MessageComposer } from '../components/MessageComposer'
 import { NotificationLogList } from '../components/NotificationLogList'
 import { TagPanel } from '../components/TagPanel'
@@ -17,45 +18,20 @@ import {
 	useNotificationLogs,
 } from '../hooks/useNotificationLogs'
 import { getAppConfig } from '../services/appConfig'
-import { ApiRequestError } from '../services/notificationApi'
+import {
+	ApiRequestError,
+	type CreateMessageResponse,
+	type MessageCategoryCode,
+	type NotificationLogItem,
+} from '../services/notificationApi'
 
-/**
- * @typedef {import('../services/notificationApi').CreateMessageResponse} CreateMessageResponse
- * @typedef {import('../services/notificationApi').MessageCategoryCode} MessageCategoryCode
- * @typedef {import('../services/notificationApi').NotificationLogItem} NotificationLogItem
- * @typedef {{ tone: 'success' | 'error'; title: string; detail: string }} FeedbackState
- */
-
-/**
- * @returns {FeedbackState | null}
- */
-function createInitialFeedback() {
-	return null
-}
-
-/**
- * @returns {CreateMessageResponse | null}
- */
-function createInitialDispatchSummary() {
-	return null
-}
-
-/**
- * @param {string} value
- * @returns {value is MessageCategoryCode}
- */
-function isMessageCategoryCode(value) {
+function isMessageCategoryCode(value: string): value is MessageCategoryCode {
 	return notificationCategories.some(
 		(categoryOption) => categoryOption.code === value,
 	)
 }
 
-/**
- * @param {unknown} error
- * @param {string} fallbackMessage
- * @returns {string}
- */
-function getErrorMessage(error, fallbackMessage) {
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
 	if (error instanceof ApiRequestError) {
 		return error.detail
 	}
@@ -72,17 +48,16 @@ export function SetupPage() {
 	const queryClient = useQueryClient()
 	const logsQuery = useNotificationLogs()
 	const createMessageMutation = useCreateMessageMutation()
-	/** @type {[MessageCategoryCode, import('react').Dispatch<import('react').SetStateAction<MessageCategoryCode>>]} */
-	const [category, setCategory] = useState(notificationCategories[0].code)
+	const [category, setCategory] = useState<MessageCategoryCode>(
+		notificationCategories[0].code,
+	)
 	const [body, setBody] = useState('')
 	const [bodyError, setBodyError] = useState('')
-	const [feedback, setFeedback] = useState(createInitialFeedback)
-	const [lastDispatchSummary, setLastDispatchSummary] = useState(
-		createInitialDispatchSummary,
-	)
+	const [feedback, setFeedback] = useState<MessageComposerFeedback | null>(null)
+	const [lastDispatchSummary, setLastDispatchSummary] =
+		useState<CreateMessageResponse | null>(null)
 
-	/** @type {NotificationLogItem[]} */
-	const logItems = logsQuery.data ?? []
+	const logItems: NotificationLogItem[] = logsQuery.data ?? []
 	const sentAttempts = logItems.filter((item) => item.status === 'sent').length
 	const failedAttempts = logItems.filter(
 		(item) => item.status === 'failed',
@@ -94,11 +69,9 @@ export function SetupPage() {
 		? getErrorMessage(logsQuery.error, 'The log history could not be loaded.')
 		: null
 
-	/**
-	 * @param {import('react').FormEvent<HTMLFormElement>} event
-	 * @returns {Promise<void>}
-	 */
-	async function handleSubmit(event) {
+	async function handleSubmit(
+		event: FormEvent<HTMLFormElement>,
+	): Promise<void> {
 		event.preventDefault()
 
 		const normalizedBody = body.trim()
