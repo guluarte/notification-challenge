@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, RadioTower, Rows3 } from 'lucide-react'
 import type { ComponentProps } from 'react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,20 +13,18 @@ import {
 	notificationChannels,
 } from '../constants/notificationCatalog'
 import { useCreateMessageMutation } from '../hooks/useCreateMessageMutation'
+import { notificationLogsQueryKey } from '../hooks/useNotificationLogs'
 import {
-	notificationLogsQueryKey,
-	useNotificationLogs,
-} from '../hooks/useNotificationLogs'
+	NotificationLogProvider,
+	useNotificationLogState,
+} from '../providers/NotificationLogProvider'
 import { getAppConfig } from '../services/appConfig'
 import {
 	ApiRequestError,
 	type CreateMessageResponse,
-	type LogPageSize,
 	type MessageCategoryCode,
-	type NotificationLogItem,
 } from '../services/notificationApi'
 
-const LOG_PAGE_SIZE_OPTIONS: LogPageSize[] = [10, 50, 100]
 type FormSubmitEvent = Parameters<
 	NonNullable<ComponentProps<'form'>['onSubmit']>
 >[0]
@@ -37,22 +35,25 @@ function isMessageCategoryCode(value: string): value is MessageCategoryCode {
 	)
 }
 
-function getErrorMessage(error: unknown, fallbackMessage: string): string {
-	if (error instanceof ApiRequestError) {
-		return error.detail
-	}
-
-	if (error instanceof Error && error.message.trim() !== '') {
-		return error.message
-	}
-
-	return fallbackMessage
+export function SetupPage() {
+	return (
+		<NotificationLogProvider>
+			<SetupPageContent />
+		</NotificationLogProvider>
+	)
 }
 
-export function SetupPage() {
+function SetupPageContent() {
 	const { appName } = getAppConfig()
 	const queryClient = useQueryClient()
 	const createMessageMutation = useCreateMessageMutation()
+	const {
+		totalItems: totalLogItems,
+		sentAttempts,
+		failedAttempts,
+		pendingAttempts,
+		resetToFirstPage,
+	} = useNotificationLogState()
 	const [category, setCategory] = useState<MessageCategoryCode>(
 		notificationCategories[0].code,
 	)
@@ -61,33 +62,6 @@ export function SetupPage() {
 	const [feedback, setFeedback] = useState<MessageComposerFeedback | null>(null)
 	const [lastDispatchSummary, setLastDispatchSummary] =
 		useState<CreateMessageResponse | null>(null)
-	const [logPageSize, setLogPageSize] = useState<LogPageSize>(10)
-	const [currentLogPage, setCurrentLogPage] = useState(1)
-	const logOffset = (currentLogPage - 1) * logPageSize
-	const logsQuery = useNotificationLogs({
-		limit: logPageSize,
-		offset: logOffset,
-	})
-
-	const logItems: NotificationLogItem[] = logsQuery.data?.items ?? []
-	const totalLogItems = logsQuery.data?.total ?? 0
-	const totalLogPages = Math.max(1, Math.ceil(totalLogItems / logPageSize))
-	const sentAttempts = logItems.filter((item) => item.status === 'sent').length
-	const failedAttempts = logItems.filter(
-		(item) => item.status === 'failed',
-	).length
-	const pendingAttempts = logItems.filter(
-		(item) => item.status === 'pending',
-	).length
-	const logErrorMessage = logsQuery.isError
-		? getErrorMessage(logsQuery.error, 'The log history could not be loaded.')
-		: null
-
-	useEffect(() => {
-		if (currentLogPage > totalLogPages) {
-			setCurrentLogPage(totalLogPages)
-		}
-	}, [currentLogPage, totalLogPages])
 
 	async function handleSubmit(event: FormSubmitEvent): Promise<void> {
 		event.preventDefault()
@@ -109,7 +83,7 @@ export function SetupPage() {
 			})
 
 			setBody('')
-			setCurrentLogPage(1)
+			resetToFirstPage()
 			setLastDispatchSummary(result)
 			setFeedback({
 				tone: 'success',
@@ -271,14 +245,14 @@ export function SetupPage() {
 					</Card>
 				</section>
 
-				<section
-					className={
-						lastDispatchSummary
-							? 'grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_360px]'
-							: 'grid gap-6'
-					}
-				>
-					<div className="grid gap-6">
+				<section className="grid gap-6">
+					<div
+						className={
+							lastDispatchSummary
+								? 'grid items-start gap-6 xl:grid-cols-[minmax(0,1.5fr)_360px]'
+								: 'grid gap-6'
+						}
+					>
 						<MessageComposer
 							categories={notificationCategories}
 							selectedCategory={category}
@@ -300,88 +274,60 @@ export function SetupPage() {
 							onSubmit={handleSubmit}
 						/>
 
-						<NotificationLogList
-							items={logItems}
-							isLoading={logsQuery.isPending}
-							errorMessage={logErrorMessage}
-							isRefreshing={logsQuery.isFetching}
-							pageSize={logPageSize}
-							pageSizeOptions={LOG_PAGE_SIZE_OPTIONS}
-							currentPage={currentLogPage}
-							totalPages={totalLogPages}
-							totalItems={totalLogItems}
-							offset={logOffset}
-							onPageSizeChange={(nextPageSize) => {
-								setLogPageSize(nextPageSize)
-								setCurrentLogPage(1)
-							}}
-							onPreviousPage={() => {
-								setCurrentLogPage((previousPage) =>
-									Math.max(1, previousPage - 1),
-								)
-							}}
-							onNextPage={() => {
-								setCurrentLogPage((previousPage) =>
-									Math.min(totalLogPages, previousPage + 1),
-								)
-							}}
-							onRefresh={() => {
-								void logsQuery.refetch()
-							}}
-						/>
+						{lastDispatchSummary ? (
+							<aside className="self-start">
+								<Card className="border-0 bg-white/74 shadow-[0_18px_60px_rgba(75,46,16,0.1)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
+									<CardHeader className="gap-3">
+										<Badge className="w-fit rounded-full bg-emerald-100 text-emerald-900">
+											Latest dispatch
+										</Badge>
+										<CardTitle className="text-xl tracking-tight text-stone-950">
+											Result summary
+										</CardTitle>
+									</CardHeader>
+									<CardContent className="grid gap-3 text-sm">
+										<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
+											<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+												Message ID
+											</p>
+											<p className="mt-2 text-2xl font-semibold text-stone-950">
+												{lastDispatchSummary.message_id}
+											</p>
+										</div>
+										<div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+											<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
+												<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+													Users
+												</p>
+												<p className="mt-2 font-medium text-stone-900">
+													{lastDispatchSummary.total_users}
+												</p>
+											</div>
+											<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
+												<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+													Attempts
+												</p>
+												<p className="mt-2 font-medium text-stone-900">
+													{lastDispatchSummary.total_attempts}
+												</p>
+											</div>
+											<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
+												<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
+													Sent / Failed
+												</p>
+												<p className="mt-2 font-medium text-stone-900">
+													{lastDispatchSummary.sent} /{' '}
+													{lastDispatchSummary.failed}
+												</p>
+											</div>
+										</div>
+									</CardContent>
+								</Card>
+							</aside>
+						) : null}
 					</div>
 
-					{lastDispatchSummary ? (
-						<aside className="grid gap-6">
-							<Card className="border-0 bg-white/74 shadow-[0_18px_60px_rgba(75,46,16,0.1)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
-								<CardHeader className="gap-3">
-									<Badge className="w-fit rounded-full bg-emerald-100 text-emerald-900">
-										Latest dispatch
-									</Badge>
-									<CardTitle className="text-xl tracking-tight text-stone-950">
-										Result summary
-									</CardTitle>
-								</CardHeader>
-								<CardContent className="grid gap-3 text-sm">
-									<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-										<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-											Message ID
-										</p>
-										<p className="mt-2 text-2xl font-semibold text-stone-950">
-											{lastDispatchSummary.message_id}
-										</p>
-									</div>
-									<div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-										<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-											<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-												Users
-											</p>
-											<p className="mt-2 font-medium text-stone-900">
-												{lastDispatchSummary.total_users}
-											</p>
-										</div>
-										<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-											<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-												Attempts
-											</p>
-											<p className="mt-2 font-medium text-stone-900">
-												{lastDispatchSummary.total_attempts}
-											</p>
-										</div>
-										<div className="rounded-[1.2rem] border border-stone-200/80 bg-stone-50/90 p-4">
-											<p className="text-xs font-semibold uppercase tracking-[0.2em] text-stone-500">
-												Sent / Failed
-											</p>
-											<p className="mt-2 font-medium text-stone-900">
-												{lastDispatchSummary.sent} /{' '}
-												{lastDispatchSummary.failed}
-											</p>
-										</div>
-									</div>
-								</CardContent>
-							</Card>
-						</aside>
-					) : null}
+					<NotificationLogList />
 				</section>
 			</div>
 		</main>

@@ -22,11 +22,8 @@ import {
 	channelLabelsByCode,
 	statusLabelsByCode,
 } from '@/constants/notificationCatalog'
-import type {
-	DeliveryStatus,
-	LogPageSize,
-	NotificationLogItem,
-} from '../services/notificationApi'
+import { useNotificationLogState } from '../providers/NotificationLogProvider'
+import type { DeliveryStatus, LogPageSize } from '../services/notificationApi'
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
 	dateStyle: 'medium',
@@ -53,23 +50,6 @@ function getStatusClassName(status: DeliveryStatus): string {
 	return 'bg-amber-100 text-amber-900 ring-1 ring-amber-900/10'
 }
 
-interface NotificationLogListProps {
-	items: NotificationLogItem[]
-	isLoading: boolean
-	errorMessage: string | null
-	isRefreshing: boolean
-	pageSize: LogPageSize
-	pageSizeOptions: LogPageSize[]
-	currentPage: number
-	totalPages: number
-	totalItems: number
-	offset: number
-	onPageSizeChange: (pageSize: LogPageSize) => void
-	onPreviousPage: () => void
-	onNextPage: () => void
-	onRefresh: () => void
-}
-
 function parseLogPageSize(
 	value: string,
 	pageSizeOptions: LogPageSize[],
@@ -83,26 +63,26 @@ function parseLogPageSize(
 	return null
 }
 
-export function NotificationLogList({
-	items,
-	isLoading,
-	errorMessage,
-	isRefreshing,
-	pageSize,
-	pageSizeOptions,
-	currentPage,
-	totalPages,
-	totalItems,
-	offset,
-	onPageSizeChange,
-	onPreviousPage,
-	onNextPage,
-	onRefresh,
-}: NotificationLogListProps) {
-	const firstVisibleItem = totalItems === 0 ? 0 : offset + 1
-	const lastVisibleItem = Math.min(offset + items.length, totalItems)
-	const hasPreviousPage = currentPage > 1
-	const hasNextPage = currentPage < totalPages
+export function NotificationLogList() {
+	const {
+		items,
+		isLoading,
+		errorMessage,
+		isRefreshing,
+		pageSize,
+		pageSizeOptions,
+		currentPage,
+		totalPages,
+		totalItems,
+		firstVisibleItem,
+		lastVisibleItem,
+		hasPreviousPage,
+		hasNextPage,
+		setPageSize,
+		goToPreviousPage,
+		goToNextPage,
+		refresh,
+	} = useNotificationLogState()
 
 	return (
 		<Card className="border-0 bg-white/78 shadow-[0_24px_90px_rgba(75,46,16,0.12)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
@@ -133,7 +113,7 @@ export function NotificationLogList({
 								onValueChange={(value) => {
 									const nextPageSize = parseLogPageSize(value, pageSizeOptions)
 									if (nextPageSize !== null) {
-										onPageSizeChange(nextPageSize)
+										setPageSize(nextPageSize)
 									}
 								}}
 							>
@@ -158,7 +138,7 @@ export function NotificationLogList({
 						<Button
 							type="button"
 							variant="outline"
-							onClick={onRefresh}
+							onClick={refresh}
 							disabled={isRefreshing}
 							className="h-11 rounded-full border-stone-300 bg-white/90 px-5 text-stone-900 hover:bg-stone-100"
 						>
@@ -180,7 +160,7 @@ export function NotificationLogList({
 						<Button
 							type="button"
 							variant="outline"
-							onClick={onPreviousPage}
+							onClick={goToPreviousPage}
 							disabled={!hasPreviousPage}
 							className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
 						>
@@ -193,7 +173,7 @@ export function NotificationLogList({
 						<Button
 							type="button"
 							variant="outline"
-							onClick={onNextPage}
+							onClick={goToNextPage}
 							disabled={!hasNextPage}
 							className="h-9 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 hover:bg-stone-100"
 						>
