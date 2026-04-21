@@ -48,14 +48,13 @@ class MessageService:
     ) -> MessageCreationResult:
         """Persist the message and fan it out to subscribed users."""
 
-        if not self.category_repository.exists(category_code):
-            raise ServiceUnavailableError(
-                "The notification category catalog is unavailable."
-            )
-
-        logger.info("Processing inbound message for category=%s", category_code)
-
         try:
+            if not self.category_repository.exists(category_code):
+                raise ServiceUnavailableError(
+                    "The notification category catalog is unavailable."
+                )
+
+            logger.info("Processing inbound message for category=%s", category_code)
             message = self.message_repository.create(
                 category_code=category_code, body=body
             )
@@ -78,6 +77,8 @@ class MessageService:
                     )
                 )
             self.session.commit()
+        except ServiceUnavailableError:
+            raise
         except SQLAlchemyError as exc:
             self.session.rollback()
             logger.exception(

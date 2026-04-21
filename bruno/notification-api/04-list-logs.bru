@@ -39,6 +39,10 @@ tests {
       expect(item.body).to.equal(messageBody);
       expect(item.status).to.equal("sent");
       expect(item.user).to.be.an("object");
+      expect(item.user.id).to.be.a("number");
+      expect(item.user.name).to.be.a("string").and.not.be.empty;
+      expect(item.user.email).to.be.a("string").and.not.be.empty;
+      expect(item.user.phone_number).to.be.a("string").and.not.be.empty;
       expect(item.channel).to.be.oneOf(["email", "push", "sms"]);
     });
   });

@@ -36,11 +36,19 @@ class FakeSession:
 class FakeCategoryRepository:
     """Category repository double."""
 
-    def __init__(self, *, exists: bool) -> None:
+    def __init__(
+        self,
+        *,
+        exists: bool,
+        error: SQLAlchemyError | None = None,
+    ) -> None:
         self._exists = exists
+        self.error = error
 
     def exists(self, category_code: str) -> bool:
         del category_code
+        if self.error is not None:
+            raise self.error
         return self._exists
 
 
@@ -257,6 +265,42 @@ def test_message_service_rolls_back_when_commit_fails() -> None:
         raise AssertionError("Expected InfrastructureError")
 
     assert session.commit_called is True
+    assert session.rollback_called is True
+
+
+def test_message_service_wraps_category_lookup_database_errors() -> None:
+    """A catalog query failure should roll back and use the standard error contract."""
+
+    session = FakeSession()
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(
+            exists=True,
+            error=SQLAlchemyError("catalog unavailable"),
+        ),
+        message_repository=FakeMessageRepository(
+            PersistedMessage(
+                id=9,
+                category_code="sports",
+                body="Playoffs",
+                created_at=datetime.now(tz=timezone.utc),
+            )
+        ),
+        subscriber_resolver=FakeSubscriberResolver(count=1),
+        notification_dispatcher=FakeNotificationDispatcher(
+            queued_attempts=1,
+            summary=DispatchSummary(total_attempts=1, sent=1, failed=0),
+        ),
+    )
+
+    try:
+        service.create_message(category_code="sports", body="Playoffs")
+    except InfrastructureError as exc:
+        assert exc.detail == "The message could not be persisted."
+    else:
+        raise AssertionError("Expected InfrastructureError")
+
+    assert session.commit_called is False
     assert session.rollback_called is True
 
 
