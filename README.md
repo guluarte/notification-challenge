@@ -137,6 +137,24 @@ The Bruno collection validates the public API from the outside in:
 
 Intentionally uncovered areas are limited to framework-generated and forced infrastructure failure branches that are already covered more deterministically by backend unit tests and dependency-override route tests.
 
+## CI/CD Workflow Local Test
+
+The GitHub Actions workflow can be smoke-tested locally with [`act`](https://github.com/nektos/act). Run these commands from the repository root with Docker running:
+
+```bash
+act pull_request -W .github/workflows/ci.yml
+act push -W .github/workflows/ci.yml
+```
+
+To run one job at a time:
+
+```bash
+act pull_request -W .github/workflows/ci.yml -j backend-checks
+act pull_request -W .github/workflows/ci.yml -j frontend-checks
+```
+
+The `publish-images` job only runs for push or manual workflow events on the default branch, `main`, `master`, or tags. When it runs under `act`, the workflow builds the Docker images but skips the GHCR login and push step because `ACT=true`.
+
 ## Database Diagram
 
 ```mermaid
