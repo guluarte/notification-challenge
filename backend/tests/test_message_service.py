@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from app.core.exceptions import InfrastructureError, ServiceUnavailableError
+from app.core.exceptions import (
+    IdempotencyConflictError,
+    InfrastructureError,
+    ServiceUnavailableError,
+)
 from app.services.message_service import MessageService
 from app.services.types import (
     DispatchSummary,
+    MessageDispatchState,
     MessageCreationResult,
     PersistedMessage,
     ResolvedSubscriber,
@@ -55,12 +60,41 @@ class FakeCategoryRepository:
 class FakeMessageRepository:
     """Message repository double that returns a known persisted message."""
 
-    def __init__(self, persisted_message: PersistedMessage) -> None:
+    def __init__(
+        self,
+        persisted_message: PersistedMessage,
+        *,
+        existing_by_key: dict[str, PersistedMessage] | None = None,
+        existing_by_key_results: list[PersistedMessage | None] | None = None,
+        create_error: SQLAlchemyError | None = None,
+    ) -> None:
         self.persisted_message = persisted_message
-        self.calls: list[tuple[str, str]] = []
+        self.existing_by_key = existing_by_key or {}
+        self.existing_by_key_results = existing_by_key_results
+        self.create_error = create_error
+        self.calls: list[tuple[str, str, str | None]] = []
+        self.get_by_idempotency_key_calls: list[str] = []
 
-    def create(self, *, category_code: str, body: str) -> PersistedMessage:
-        self.calls.append((category_code, body))
+    def get_by_idempotency_key(
+        self,
+        *,
+        idempotency_key: str,
+    ) -> PersistedMessage | None:
+        self.get_by_idempotency_key_calls.append(idempotency_key)
+        if self.existing_by_key_results is not None:
+            return self.existing_by_key_results.pop(0)
+        return self.existing_by_key.get(idempotency_key)
+
+    def create(
+        self,
+        *,
+        category_code: str,
+        body: str,
+        idempotency_key: str | None = None,
+    ) -> PersistedMessage:
+        self.calls.append((category_code, body, idempotency_key))
+        if self.create_error is not None:
+            raise self.create_error
         return self.persisted_message
 
 
@@ -92,8 +126,15 @@ class FakeNotificationDispatcher:
     def __init__(self, *, queued_attempts: int, summary: DispatchSummary) -> None:
         self.queued_attempts = queued_attempts
         self.summary = summary
+        self.dispatch_state = MessageDispatchState(
+            total_users=0,
+            total_attempts=summary.total_attempts,
+            sent=summary.sent,
+            failed=summary.failed,
+        )
         self.prepare_calls: list[tuple[PersistedMessage, list[ResolvedSubscriber]]] = []
         self.dispatch_calls: list[tuple[int | None, int | None]] = []
+        self.summarize_calls: list[int] = []
 
     def prepare_dispatch(
         self,
@@ -113,6 +154,10 @@ class FakeNotificationDispatcher:
         self.dispatch_calls.append((message_id, limit))
         return self.summary
 
+    def summarize_message_dispatch(self, *, message_id: int) -> MessageDispatchState:
+        self.summarize_calls.append(message_id)
+        return self.dispatch_state
+
     def dispatch(
         self,
         *,
@@ -121,6 +166,16 @@ class FakeNotificationDispatcher:
     ) -> DispatchSummary:
         del message, subscribers
         return self.summary
+
+
+def _unique_key_error() -> IntegrityError:
+    """Return an integrity error shaped like a duplicate key failure."""
+
+    return IntegrityError(
+        "INSERT INTO messages",
+        {},
+        Exception("duplicate key value violates unique constraint"),
+    )
 
 
 def test_message_service_commits_successful_dispatch() -> None:
@@ -161,10 +216,338 @@ def test_message_service_commits_successful_dispatch() -> None:
     )
     assert session.commit_called is True
     assert session.rollback_called is False
-    assert message_repository.calls == [("sports", "Team A won")]
+    assert message_repository.calls == [("sports", "Team A won", None)]
     assert subscriber_resolver.calls == ["sports"]
     assert dispatcher.prepare_calls == [(message, subscriber_resolver.subscribers)]
     assert dispatcher.dispatch_calls == [(5, None)]
+
+
+def test_message_service_replays_existing_message_for_matching_idempotency_key() -> (
+    None
+):
+    """Duplicate submissions should return existing dispatch state without fan-out."""
+
+    session = FakeSession()
+    existing_message = PersistedMessage(
+        id=6,
+        category_code="sports",
+        body="Team A won",
+        created_at=datetime.now(tz=timezone.utc),
+        idempotency_key="submit-123",
+    )
+    new_message = PersistedMessage(
+        id=7,
+        category_code="sports",
+        body="Team A won",
+        created_at=datetime.now(tz=timezone.utc),
+    )
+    message_repository = FakeMessageRepository(
+        new_message,
+        existing_by_key={"submit-123": existing_message},
+    )
+    subscriber_resolver = FakeSubscriberResolver(count=2)
+    dispatcher = FakeNotificationDispatcher(
+        queued_attempts=0,
+        summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
+    )
+    dispatcher.dispatch_state = MessageDispatchState(
+        total_users=2,
+        total_attempts=3,
+        sent=2,
+        failed=1,
+    )
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=message_repository,
+        subscriber_resolver=subscriber_resolver,
+        notification_dispatcher=dispatcher,
+    )
+
+    result = service.create_message(
+        category_code="sports",
+        body="Team A won",
+        idempotency_key=" submit-123 ",
+    )
+
+    assert result == MessageCreationResult(
+        message_id=6,
+        category_code="sports",
+        body="Team A won",
+        total_users=2,
+        total_attempts=3,
+        sent=2,
+        failed=1,
+        created_at=existing_message.created_at,
+        idempotency_key="submit-123",
+        was_duplicate=True,
+    )
+    assert session.commit_called is False
+    assert session.rollback_called is False
+    assert message_repository.get_by_idempotency_key_calls == ["submit-123"]
+    assert message_repository.calls == []
+    assert subscriber_resolver.calls == []
+    assert dispatcher.prepare_calls == []
+    assert dispatcher.dispatch_calls == []
+    assert dispatcher.summarize_calls == [6]
+
+
+def test_message_service_rejects_idempotency_key_reuse_for_different_payload() -> None:
+    """An idempotency key cannot be reused for a different category or body."""
+
+    session = FakeSession()
+    existing_message = PersistedMessage(
+        id=6,
+        category_code="sports",
+        body="Team A won",
+        created_at=datetime.now(tz=timezone.utc),
+        idempotency_key="submit-123",
+    )
+    message_repository = FakeMessageRepository(
+        PersistedMessage(
+            id=7,
+            category_code="sports",
+            body="Quarterly update",
+            created_at=datetime.now(tz=timezone.utc),
+        ),
+        existing_by_key={"submit-123": existing_message},
+    )
+    dispatcher = FakeNotificationDispatcher(
+        queued_attempts=0,
+        summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
+    )
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=message_repository,
+        subscriber_resolver=FakeSubscriberResolver(count=2),
+        notification_dispatcher=dispatcher,
+    )
+
+    try:
+        service.create_message(
+            category_code="finance",
+            body="Quarterly update",
+            idempotency_key="submit-123",
+        )
+    except IdempotencyConflictError as exc:
+        assert (
+            exc.detail
+            == "The idempotency key has already been used for a different message."
+        )
+    else:
+        raise AssertionError("Expected IdempotencyConflictError")
+
+    assert session.commit_called is False
+    assert session.rollback_called is False
+    assert message_repository.calls == []
+    assert dispatcher.prepare_calls == []
+    assert dispatcher.dispatch_calls == []
+
+
+def test_message_service_persists_idempotency_key_for_new_submission() -> None:
+    """New submissions should store normalized idempotency keys on the message."""
+
+    session = FakeSession()
+    message = PersistedMessage(
+        id=15,
+        category_code="finance",
+        body="Quarterly update",
+        created_at=datetime.now(tz=timezone.utc),
+        idempotency_key="submit-456",
+    )
+    message_repository = FakeMessageRepository(message)
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=message_repository,
+        subscriber_resolver=FakeSubscriberResolver(count=0),
+        notification_dispatcher=FakeNotificationDispatcher(
+            queued_attempts=0,
+            summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
+        ),
+    )
+
+    result = service.create_message(
+        category_code="finance",
+        body="Quarterly update",
+        idempotency_key=" submit-456 ",
+    )
+
+    assert result.idempotency_key == "submit-456"
+    assert result.was_duplicate is False
+    assert message_repository.get_by_idempotency_key_calls == ["submit-456"]
+    assert message_repository.calls == [("finance", "Quarterly update", "submit-456")]
+
+
+def test_message_service_replays_after_concurrent_idempotency_insert() -> None:
+    """A duplicate-key race should reload and replay the winning message."""
+
+    session = FakeSession()
+    existing_message = PersistedMessage(
+        id=18,
+        category_code="sports",
+        body="Team A won",
+        created_at=datetime.now(tz=timezone.utc),
+        idempotency_key="submit-789",
+    )
+    message_repository = FakeMessageRepository(
+        PersistedMessage(
+            id=19,
+            category_code="sports",
+            body="Team A won",
+            created_at=datetime.now(tz=timezone.utc),
+        ),
+        existing_by_key_results=[None, existing_message],
+        create_error=_unique_key_error(),
+    )
+    dispatcher = FakeNotificationDispatcher(
+        queued_attempts=0,
+        summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
+    )
+    dispatcher.dispatch_state = MessageDispatchState(
+        total_users=2,
+        total_attempts=5,
+        sent=5,
+        failed=0,
+    )
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=message_repository,
+        subscriber_resolver=FakeSubscriberResolver(count=2),
+        notification_dispatcher=dispatcher,
+    )
+
+    result = service.create_message(
+        category_code="sports",
+        body="Team A won",
+        idempotency_key="submit-789",
+    )
+
+    assert result == MessageCreationResult(
+        message_id=18,
+        category_code="sports",
+        body="Team A won",
+        total_users=2,
+        total_attempts=5,
+        sent=5,
+        failed=0,
+        created_at=existing_message.created_at,
+        idempotency_key="submit-789",
+        was_duplicate=True,
+    )
+    assert session.rollback_called is True
+    assert session.commit_called is False
+    assert message_repository.get_by_idempotency_key_calls == [
+        "submit-789",
+        "submit-789",
+    ]
+    assert message_repository.calls == [("sports", "Team A won", "submit-789")]
+    assert dispatcher.prepare_calls == []
+    assert dispatcher.dispatch_calls == []
+    assert dispatcher.summarize_calls == [18]
+
+
+def test_message_service_conflicts_after_concurrent_idempotency_insert_reuse() -> None:
+    """A raced duplicate with a different payload should still return a conflict."""
+
+    session = FakeSession()
+    existing_message = PersistedMessage(
+        id=18,
+        category_code="sports",
+        body="Team A won",
+        created_at=datetime.now(tz=timezone.utc),
+        idempotency_key="submit-789",
+    )
+    message_repository = FakeMessageRepository(
+        PersistedMessage(
+            id=19,
+            category_code="finance",
+            body="Quarterly update",
+            created_at=datetime.now(tz=timezone.utc),
+        ),
+        existing_by_key_results=[None, existing_message],
+        create_error=_unique_key_error(),
+    )
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=message_repository,
+        subscriber_resolver=FakeSubscriberResolver(count=2),
+        notification_dispatcher=FakeNotificationDispatcher(
+            queued_attempts=0,
+            summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
+        ),
+    )
+
+    try:
+        service.create_message(
+            category_code="finance",
+            body="Quarterly update",
+            idempotency_key="submit-789",
+        )
+    except IdempotencyConflictError as exc:
+        assert (
+            exc.detail
+            == "The idempotency key has already been used for a different message."
+        )
+    else:
+        raise AssertionError("Expected IdempotencyConflictError")
+
+    assert session.rollback_called is True
+    assert session.commit_called is False
+    assert message_repository.get_by_idempotency_key_calls == [
+        "submit-789",
+        "submit-789",
+    ]
+    assert message_repository.calls == [("finance", "Quarterly update", "submit-789")]
+
+
+def test_message_service_keeps_infrastructure_error_when_insert_conflict_missing() -> (
+    None
+):
+    """Integrity errors without a reloadable idempotent message remain infrastructure failures."""
+
+    session = FakeSession()
+    message_repository = FakeMessageRepository(
+        PersistedMessage(
+            id=19,
+            category_code="sports",
+            body="Team A won",
+            created_at=datetime.now(tz=timezone.utc),
+        ),
+        existing_by_key_results=[None, None],
+        create_error=_unique_key_error(),
+    )
+    service = MessageService(
+        session=session,
+        category_repository=FakeCategoryRepository(exists=True),
+        message_repository=message_repository,
+        subscriber_resolver=FakeSubscriberResolver(count=2),
+        notification_dispatcher=FakeNotificationDispatcher(
+            queued_attempts=0,
+            summary=DispatchSummary(total_attempts=0, sent=0, failed=0),
+        ),
+    )
+
+    try:
+        service.create_message(
+            category_code="sports",
+            body="Team A won",
+            idempotency_key="submit-789",
+        )
+    except InfrastructureError as exc:
+        assert exc.detail == "The message could not be persisted."
+    else:
+        raise AssertionError("Expected InfrastructureError")
+
+    assert session.rollback_called is True
+    assert session.commit_called is False
+    assert message_repository.get_by_idempotency_key_calls == [
+        "submit-789",
+        "submit-789",
+    ]
 
 
 def test_message_service_returns_zero_attempts_for_empty_subscriber_list() -> None:

@@ -27,8 +27,13 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         CheckConstraint("btrim(body) <> ''", name="ck_messages_body_not_blank"),
+        CheckConstraint(
+            "idempotency_key IS NULL OR btrim(idempotency_key) <> ''",
+            name="ck_messages_idempotency_key_not_blank",
+        ),
         Index("ix_messages_category_code", "category_code"),
         Index("ix_messages_created_at", "created_at"),
+        Index("ix_messages_idempotency_key", "idempotency_key", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -38,6 +43,7 @@ class Message(Base):
         nullable=False,
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

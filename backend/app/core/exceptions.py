@@ -28,6 +28,13 @@ class InfrastructureError(ApplicationError):
     code = "infrastructure_error"
 
 
+class IdempotencyConflictError(ApplicationError):
+    """Raised when an idempotency key is reused for a different submission."""
+
+    status_code = 409
+    code = "idempotency_conflict"
+
+
 class StrategyConfigurationError(ApplicationError):
     """Raised when a notification channel cannot be resolved."""
 

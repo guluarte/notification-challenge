@@ -14,6 +14,7 @@ from app.repositories.categories import NotificationCategoryRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.notification_deliveries import NotificationAttemptRepository
 from app.services.types import (
+    MessageDispatchState,
     NotificationLogEntry,
     PendingNotificationAttempt,
     PersistedMessage,
@@ -29,6 +30,16 @@ class FakeScalarResult:
 
     def all(self) -> list[NotificationAttempt]:
         return list(self.rows)
+
+
+class FakeMessageScalarResult:
+    """Return one configured message for repository scalar queries."""
+
+    def __init__(self, row: Message | None) -> None:
+        self.row = row
+
+    def one_or_none(self) -> Message | None:
+        return self.row
 
 
 def _build_message(*, message_id: int, created_at: datetime) -> Message:
@@ -143,6 +154,7 @@ def test_message_repository_creates_and_maps_persisted_message() -> None:
         result = repository.create(
             category_code="sports",
             body="Team A won the championship",
+            idempotency_key="submit-123",
         )
 
     assert result == PersistedMessage(
@@ -150,13 +162,65 @@ def test_message_repository_creates_and_maps_persisted_message() -> None:
         category_code="sports",
         body="Team A won the championship",
         created_at=created_at,
+        idempotency_key="submit-123",
     )
     assert len(added_messages) == 1
     assert added_messages[0].category_code == "sports"
     assert added_messages[0].body == "Team A won the championship"
+    assert added_messages[0].idempotency_key == "submit-123"
     add_mock.assert_called_once()
     flush_mock.assert_called_once_with()
     refresh_mock.assert_called_once()
+    session.close()
+
+
+def test_message_repository_loads_message_by_idempotency_key() -> None:
+    """The message repository should map stored idempotency key matches."""
+
+    created_at = datetime(2026, 4, 20, 19, 25, tzinfo=timezone.utc)
+    session = Session()
+    repository = MessageRepository(session)
+    message = Message(
+        id=22,
+        category_code="finance",
+        body="Quarterly update",
+        idempotency_key="submit-456",
+        created_at=created_at,
+    )
+
+    with patch.object(
+        session,
+        "scalars",
+        return_value=FakeMessageScalarResult(message),
+    ) as scalars_mock:
+        result = repository.get_by_idempotency_key(idempotency_key="submit-456")
+
+    assert result == PersistedMessage(
+        id=22,
+        category_code="finance",
+        body="Quarterly update",
+        created_at=created_at,
+        idempotency_key="submit-456",
+    )
+    scalars_mock.assert_called_once()
+    session.close()
+
+
+def test_message_repository_returns_none_for_missing_idempotency_key() -> None:
+    """Missing idempotency keys should return no message."""
+
+    session = Session()
+    repository = MessageRepository(session)
+
+    with patch.object(
+        session,
+        "scalars",
+        return_value=FakeMessageScalarResult(None),
+    ) as scalars_mock:
+        result = repository.get_by_idempotency_key(idempotency_key="missing")
+
+    assert result is None
+    scalars_mock.assert_called_once()
     session.close()
 
 
@@ -401,4 +465,23 @@ def test_notification_attempt_repository_counts_logs() -> None:
 
     assert total == 42
     scalar_mock.assert_called_once()
+    session.close()
+
+
+def test_notification_attempt_repository_summarizes_message_dispatch() -> None:
+    """The repository should aggregate existing attempt state for replayed posts."""
+
+    session = Session()
+    repository = NotificationAttemptRepository(session)
+
+    with patch.object(session, "scalar", side_effect=[5, 2, 4, 1]) as scalar_mock:
+        summary = repository.summarize_for_message(message_id=12)
+
+    assert summary == MessageDispatchState(
+        total_users=2,
+        total_attempts=5,
+        sent=4,
+        failed=1,
+    )
+    assert scalar_mock.call_count == 4
     session.close()

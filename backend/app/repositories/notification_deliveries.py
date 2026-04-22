@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 from app.models import NotificationAttempt
 from app.models.enums import DeliveryStatus
 from app.services.types import (
+    MessageDispatchState,
     NotificationLogEntry,
     PendingNotificationAttempt,
     PersistedMessage,
@@ -161,6 +162,38 @@ class NotificationAttemptRepository(BaseRepository):
             select(func.count(NotificationAttempt.id)).select_from(NotificationAttempt)
         )
         return int(total or 0)
+
+    def summarize_for_message(self, *, message_id: int) -> MessageDispatchState:
+        """Return aggregate dispatch state for a message."""
+
+        total_attempts = self.session.scalar(
+            select(func.count(NotificationAttempt.id)).where(
+                NotificationAttempt.message_id == message_id
+            )
+        )
+        total_users = self.session.scalar(
+            select(func.count(func.distinct(NotificationAttempt.user_id))).where(
+                NotificationAttempt.message_id == message_id
+            )
+        )
+        sent = self.session.scalar(
+            select(func.count(NotificationAttempt.id)).where(
+                NotificationAttempt.message_id == message_id,
+                NotificationAttempt.status == DeliveryStatus.SENT.value,
+            )
+        )
+        failed = self.session.scalar(
+            select(func.count(NotificationAttempt.id)).where(
+                NotificationAttempt.message_id == message_id,
+                NotificationAttempt.status == DeliveryStatus.FAILED.value,
+            )
+        )
+        return MessageDispatchState(
+            total_users=int(total_users or 0),
+            total_attempts=int(total_attempts or 0),
+            sent=int(sent or 0),
+            failed=int(failed or 0),
+        )
 
     @staticmethod
     def _snapshot(subscriber: ResolvedSubscriber) -> dict[str, Any]:

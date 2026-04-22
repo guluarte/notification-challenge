@@ -8,6 +8,7 @@ import logging
 from .types import (
     DeliveryAttemptRepositoryProtocol,
     DispatchSummary,
+    MessageDispatchState,
     PendingNotificationAttempt,
     PersistedMessage,
     ResolvedSubscriber,
@@ -91,6 +92,20 @@ class NotificationDispatcherService:
             sent=sent,
             failed=failed,
         )
+
+    def summarize_message_dispatch(self, *, message_id: int) -> MessageDispatchState:
+        """Return the persisted dispatch state for an existing message."""
+
+        state = self.attempt_repository.summarize_for_message(message_id=message_id)
+        logger.info(
+            "Loaded idempotent dispatch state for message_id=%s users=%s attempts=%s sent=%s failed=%s",
+            message_id,
+            state.total_users,
+            state.total_attempts,
+            state.sent,
+            state.failed,
+        )
+        return state
 
     def dispatch(
         self,

@@ -18,6 +18,7 @@ class PersistedMessage:
     category_code: str
     body: str
     created_at: datetime
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +71,16 @@ class DispatchSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class MessageDispatchState:
+    """Persisted dispatch state for an existing submitted message."""
+
+    total_users: int
+    total_attempts: int
+    sent: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
 class MessageCreationResult:
     """Service result returned after message intake and dispatch."""
 
@@ -81,6 +92,8 @@ class MessageCreationResult:
     sent: int
     failed: int
     created_at: datetime
+    idempotency_key: str | None = None
+    was_duplicate: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,7 +154,21 @@ class CategoryRepositoryProtocol(Protocol):
 class MessageRepositoryProtocol(Protocol):
     """Repository contract for message persistence."""
 
-    def create(self, *, category_code: str, body: str) -> PersistedMessage:
+    def get_by_idempotency_key(
+        self,
+        *,
+        idempotency_key: str,
+    ) -> PersistedMessage | None:
+        """Return the message previously created for an idempotency key."""
+        ...
+
+    def create(
+        self,
+        *,
+        category_code: str,
+        body: str,
+        idempotency_key: str | None = None,
+    ) -> PersistedMessage:
         """Persist the message and return the repository result."""
         ...
 
@@ -234,6 +261,10 @@ class DeliveryAttemptRepositoryProtocol(Protocol):
         """Mark a delivery attempt as failed."""
         ...
 
+    def summarize_for_message(self, *, message_id: int) -> MessageDispatchState:
+        """Return aggregate attempt state for one message."""
+        ...
+
 
 class NotificationStrategyProtocol(Protocol):
     """Strategy contract used by the dispatcher."""
@@ -275,6 +306,10 @@ class NotificationDispatcherProtocol(Protocol):
         limit: int | None = None,
     ) -> DispatchSummary:
         """Process pending attempts that are ready for delivery."""
+        ...
+
+    def summarize_message_dispatch(self, *, message_id: int) -> MessageDispatchState:
+        """Return persisted dispatch state for an existing message."""
         ...
 
     def dispatch(

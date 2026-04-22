@@ -12,7 +12,11 @@ from typing import Any
 from starlette.types import Message, Scope
 
 from app.api.dependencies import get_message_service, get_notification_log_service
-from app.core.exceptions import InfrastructureError, ServiceUnavailableError
+from app.core.exceptions import (
+    IdempotencyConflictError,
+    InfrastructureError,
+    ServiceUnavailableError,
+)
 from app.main import create_app
 from app.models.enums import DeliveryStatus
 from app.services.types import (
@@ -28,6 +32,7 @@ async def _call_app(
     path: str,
     query_string: str = "",
     json_body: dict[str, object] | None = None,
+    extra_headers: dict[str, str] | None = None,
     app_overrides: dict[Callable[..., Any], Callable[..., Any]] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     """Issue a minimal ASGI request against the FastAPI app."""
@@ -43,6 +48,9 @@ async def _call_app(
         request_body = json.dumps(json_body).encode("utf-8")
         headers.append((b"content-type", b"application/json"))
         headers.append((b"content-length", str(len(request_body)).encode("ascii")))
+    if extra_headers is not None:
+        for name, value in extra_headers.items():
+            headers.append((name.lower().encode("ascii"), value.encode("ascii")))
 
     raw_path = path
     if query_string != "":
@@ -109,10 +117,16 @@ class FakeMessageService:
 
     result: MessageCreationResult | None = None
     error: Exception | None = None
-    last_call: tuple[str, str] | None = None
+    last_call: tuple[str, str, str | None] | None = None
 
-    def create_message(self, *, category_code: str, body: str) -> MessageCreationResult:
-        self.last_call = (category_code, body)
+    def create_message(
+        self,
+        *,
+        category_code: str,
+        body: str,
+        idempotency_key: str | None = None,
+    ) -> MessageCreationResult:
+        self.last_call = (category_code, body, idempotency_key)
         if self.error is not None:
             raise self.error
         if self.result is None:
@@ -194,7 +208,82 @@ def test_create_message_route_returns_created_payload() -> None:
         "failed": 1,
         "created_at": _isoformat_z(created_at),
     }
-    assert service.last_call == ("sports", "Team A won")
+    assert service.last_call == ("sports", "Team A won", None)
+
+
+def test_create_message_route_passes_idempotency_key_header() -> None:
+    """The route should pass normalized idempotency keys into the service."""
+
+    created_at = datetime.now(tz=timezone.utc)
+    service = FakeMessageService(
+        result=MessageCreationResult(
+            message_id=12,
+            category_code="sports",
+            body="Team A won",
+            total_users=2,
+            total_attempts=3,
+            sent=2,
+            failed=1,
+            created_at=created_at,
+        )
+    )
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="POST",
+            path="/v1/messages",
+            json_body={"category": "sports", "body": "Team A won"},
+            extra_headers={"Idempotency-Key": " submit-123 "},
+            app_overrides={get_message_service: _message_service_override(service)},
+        )
+    )
+
+    assert status_code == 201
+    assert payload["message_id"] == 12
+    assert service.last_call == ("sports", "Team A won", "submit-123")
+
+
+def test_create_message_route_returns_ok_for_idempotent_duplicate() -> None:
+    """Duplicate idempotent submissions should replay the prior result."""
+
+    created_at = datetime.now(tz=timezone.utc)
+    service = FakeMessageService(
+        result=MessageCreationResult(
+            message_id=12,
+            category_code="sports",
+            body="Team A won",
+            total_users=2,
+            total_attempts=3,
+            sent=2,
+            failed=1,
+            created_at=created_at,
+            idempotency_key="submit-123",
+            was_duplicate=True,
+        )
+    )
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="POST",
+            path="/v1/messages",
+            json_body={"category": "sports", "body": "Team A won"},
+            extra_headers={"Idempotency-Key": "submit-123"},
+            app_overrides={get_message_service: _message_service_override(service)},
+        )
+    )
+
+    assert status_code == 200
+    assert payload == {
+        "message_id": 12,
+        "category": "sports",
+        "body": "Team A won",
+        "total_users": 2,
+        "total_attempts": 3,
+        "sent": 2,
+        "failed": 1,
+        "created_at": _isoformat_z(created_at),
+    }
+    assert service.last_call == ("sports", "Team A won", "submit-123")
 
 
 def test_create_message_route_returns_validation_payload_for_blank_body() -> None:
@@ -271,6 +360,32 @@ def test_create_message_route_maps_application_errors() -> None:
     assert payload == {
         "detail": "The notification category catalog is unavailable.",
         "code": "service_unavailable",
+    }
+
+
+def test_create_message_route_maps_idempotency_conflicts() -> None:
+    """Idempotency key reuse with a different payload should return 409."""
+
+    service = FakeMessageService(
+        error=IdempotencyConflictError(
+            "The idempotency key has already been used for a different message."
+        )
+    )
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="POST",
+            path="/v1/messages",
+            json_body={"category": "finance", "body": "Quarterly update"},
+            extra_headers={"Idempotency-Key": "submit-123"},
+            app_overrides={get_message_service: _message_service_override(service)},
+        )
+    )
+
+    assert status_code == 409
+    assert payload == {
+        "detail": "The idempotency key has already been used for a different message.",
+        "code": "idempotency_conflict",
     }
 
 

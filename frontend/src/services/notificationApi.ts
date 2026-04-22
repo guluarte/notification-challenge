@@ -8,6 +8,7 @@ export type LogPageSize = 10 | 50 | 100
 export interface CreateMessagePayload {
 	category: MessageCategoryCode
 	body: string
+	idempotencyKey?: string
 }
 
 export interface CreateMessageResponse {
@@ -189,12 +190,20 @@ export async function submitMessage(
 	payload: CreateMessagePayload,
 	fetchImpl: typeof fetch = globalThis.fetch,
 ): Promise<CreateMessageResponse> {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json',
+	}
+	if (payload.idempotencyKey !== undefined) {
+		headers['Idempotency-Key'] = payload.idempotencyKey
+	}
+
 	const response = await fetchImpl(buildApiUrl('/messages'), {
 		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-		},
-		body: JSON.stringify(payload),
+		headers,
+		body: JSON.stringify({
+			category: payload.category,
+			body: payload.body,
+		}),
 	})
 
 	if (!response.ok) {

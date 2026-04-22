@@ -29,6 +29,24 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 	})
 }
 
+function isRequestInit(value: unknown): value is RequestInit {
+	return value !== null && typeof value === 'object'
+}
+
+function getIdempotencyKeyFromCall(call: ReadonlyArray<unknown>): string {
+	const requestInit = call[1]
+	if (!isRequestInit(requestInit)) {
+		throw new Error('Expected fetch call to include request options')
+	}
+
+	const idempotencyKey = new Headers(requestInit.headers).get('Idempotency-Key')
+	if (idempotencyKey === null) {
+		throw new Error('Expected request to include an idempotency key')
+	}
+
+	return idempotencyKey
+}
+
 describe('SetupPage', () => {
 	it('renders the configured application, pagination controls, and audit items', async () => {
 		vi.stubEnv('VITE_APP_NAME', 'Notification Control Center')
@@ -239,6 +257,7 @@ describe('SetupPage', () => {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
+					'Idempotency-Key': expect.any(String),
 				},
 				body: JSON.stringify({
 					category: 'sports',
@@ -249,6 +268,76 @@ describe('SetupPage', () => {
 		expect(fetchMock).toHaveBeenNthCalledWith(
 			3,
 			'http://localhost:8000/v1/logs?limit=10&offset=0',
+		)
+	})
+
+	it('reuses the idempotency key when retrying the same failed submission', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				jsonResponse({
+					items: [],
+					total: 0,
+					limit: 10,
+					offset: 0,
+				}),
+			)
+			.mockRejectedValueOnce(new Error('network unavailable'))
+			.mockResolvedValueOnce(
+				jsonResponse(
+					{
+						message_id: 12,
+						category: 'sports',
+						body: 'Team A won',
+						total_users: 2,
+						total_attempts: 3,
+						sent: 2,
+						failed: 1,
+						created_at: '2026-04-20T17:10:00Z',
+					},
+					{ status: 201 },
+				),
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					items: [],
+					total: 0,
+					limit: 10,
+					offset: 0,
+				}),
+			)
+		vi.stubGlobal('fetch', fetchMock)
+
+		renderSetupPage()
+
+		await screen.findByText('No delivery attempts yet')
+
+		fireEvent.change(screen.getByLabelText('Message'), {
+			target: { value: 'Team A won' },
+		})
+		fireEvent.submit(screen.getByRole('button', { name: 'Send message' }))
+
+		expect(
+			await screen.findByText('The message could not be submitted.'),
+		).toBeInTheDocument()
+
+		fireEvent.submit(screen.getByRole('button', { name: 'Send message' }))
+
+		await screen.findByText(
+			'Delivered 2 of 3 attempts across 2 subscribed users.',
+		)
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledTimes(4)
+		})
+
+		const firstSubmitCall = fetchMock.mock.calls[1]
+		const secondSubmitCall = fetchMock.mock.calls[2]
+		if (firstSubmitCall === undefined || secondSubmitCall === undefined) {
+			throw new Error('Expected two submit requests')
+		}
+
+		expect(getIdempotencyKeyFromCall(firstSubmitCall)).toBe(
+			getIdempotencyKeyFromCall(secondSubmitCall),
 		)
 	})
 

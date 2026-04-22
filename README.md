@@ -19,6 +19,7 @@ Current status:
 - Resolve subscribed users and preferred channels
 - Dispatch through channel strategies
 - Persist one audit row per delivery attempt
+- Protect duplicate submissions with optional `Idempotency-Key` request headers
 - Queue attempts separately from executing them so the same domain flow can run in-process or from a worker later
 - List logs ordered newest to oldest
 
@@ -39,6 +40,12 @@ Supported channels:
 - `GET /v1/health`
 - `POST /v1/messages`
 - `GET /v1/logs?limit=10&offset=0`
+
+`POST /v1/messages` accepts an optional `Idempotency-Key` header. The first
+request with a key stores it on the submitted message. A later request with the
+same key, category, and body returns the original dispatch summary with `200 OK`
+and does not create another message or another set of notification attempts.
+Reusing the same key with a different category or body returns `409 Conflict`.
 
 Delivery logs include enough information to verify delivery to subscribers. Each
 log item exposes the message details, channel, status, timestamps, errors when
@@ -132,6 +139,7 @@ The Bruno collection validates the public API from the outside in:
 
 - `GET /v1/health`
 - `POST /v1/messages` happy path
+- `POST /v1/messages` duplicate replay through `Idempotency-Key`
 - `POST /v1/messages` validation failure for blank bodies
 - `GET /v1/logs?limit=10&offset=0` newest-first audit history after message submission
 
@@ -190,6 +198,7 @@ erDiagram
         INTEGER id PK
         VARCHAR category_code FK
         TEXT body
+        VARCHAR idempotency_key UK
         TIMESTAMPTZ created_at
     }
     notification_attempts {
@@ -229,6 +238,11 @@ erDiagram
 
 The dispatch flow is intentionally split into two phases: queue pending attempts first, then execute ready attempts. The API still runs both phases in-process today, but the same service boundaries can be reused by a background worker later without rewriting channel orchestration.
 
+Messages can store a nullable `idempotency_key`. A unique index enforces one
+message per key while still allowing clients that do not need replay protection
+to omit the header. Duplicate submissions are replayed from persisted message
+and attempt state instead of dispatching again.
+
 `user_category_subscriptions` and `user_channel_preferences` stay normalized instead of being embedded on `users` as arrays. That keeps category targeting and channel selection independently queryable, indexable, and ready for future changes such as retries, reporting, and more granular preference rules.
 
 The demo data is loaded by `python -m app.seeders.run`, which seeds the normalized operational tables directly. That keeps the runtime schema smaller while still giving local and Docker environments a deterministic, repeatable dataset.
@@ -238,5 +252,7 @@ The demo data is loaded by `python -m app.seeders.run`, which seeds the normaliz
 - Dispatch still runs in-process for the challenge to keep setup and review simple.
 - The dispatcher now separates queueing from execution, so a worker can process pending attempts later without changing repository or strategy logic.
 - `notification_attempts` stores pending, processing, and finalization timestamps plus `next_retry_at`, which provides the lifecycle metadata needed for retries and queue-based execution later.
+- Idempotency keys are stored directly on `messages`, which is enough for duplicate POST replay in this challenge. A production version would usually add client ownership, key expiration, request fingerprints, and stronger concurrent-insert handling across horizontally scaled API nodes.
 - `/v1/logs` returns seeded recipient contact details so the demo audit history can verify exactly who received each notification. In production this endpoint would require authentication, role-based access, access auditing, and field masking or redaction for viewers who do not need full PII.
 - Worker-claim semantics such as leases or `SKIP LOCKED` are intentionally left out to keep the implementation small; they would be the next step before running multiple dispatch workers concurrently.
+- Future production extensibility would focus on a real queue migration design, worker locking and leases, and stronger auth and PII-handling rules for log access.

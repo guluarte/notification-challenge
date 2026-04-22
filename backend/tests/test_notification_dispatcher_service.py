@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from app.services.notification_dispatcher import NotificationDispatcherService
 from app.services.types import (
     DeliveryResult,
+    MessageDispatchState,
     PendingNotificationAttempt,
     PersistedMessage,
     ResolvedSubscriber,
@@ -147,6 +148,17 @@ class FakeDeliveryRepository:
         attempt.next_retry_at = next_retry_at
         attempt.failure_reason = failure_reason
         attempt.provider_reference = None
+
+    def summarize_for_message(self, *, message_id: int) -> MessageDispatchState:
+        message_attempts = [
+            attempt for attempt in self.attempts if attempt.message_id == message_id
+        ]
+        return MessageDispatchState(
+            total_users=len({attempt.user_id for attempt in message_attempts}),
+            total_attempts=len(message_attempts),
+            sent=sum(1 for attempt in message_attempts if attempt.status == "sent"),
+            failed=sum(1 for attempt in message_attempts if attempt.status == "failed"),
+        )
 
     def _find(self, attempt_id: int) -> RecordedAttempt:
         for attempt in self.attempts:
@@ -305,6 +317,48 @@ def test_notification_dispatcher_isolates_channel_failures() -> None:
     assert repository.attempts[1].processed_at is not None
     assert repository.attempts[1].next_retry_at is None
     assert set(repository.delivered_timestamps) == {1}
+
+
+def test_notification_dispatcher_summarizes_existing_message_attempts() -> None:
+    """Existing attempts should be summarized without dispatching again."""
+
+    repository = FakeDeliveryRepository()
+    factory = FakeStrategyFactory(
+        strategies={
+            "email": FakeStrategy(provider_reference="email-1"),
+            "sms": FakeStrategy(provider_reference="sms-1", should_fail=True),
+        }
+    )
+    service = NotificationDispatcherService(
+        attempt_repository=repository,
+        strategy_factory=factory,
+    )
+    message = PersistedMessage(
+        id=10,
+        category_code="sports",
+        body="Team A won",
+        created_at=datetime.now(tz=timezone.utc),
+    )
+    subscribers = [
+        ResolvedSubscriber(
+            user_id=1,
+            name="Alex",
+            email="alex@example.com",
+            phone_number="+15550000001",
+            channel_codes=("email", "sms"),
+        )
+    ]
+    service.prepare_dispatch(message=message, subscribers=subscribers)
+    service.dispatch_pending_attempts(message_id=message.id)
+
+    summary = service.summarize_message_dispatch(message_id=message.id)
+
+    assert summary == MessageDispatchState(
+        total_users=1,
+        total_attempts=2,
+        sent=1,
+        failed=1,
+    )
 
 
 def test_notification_dispatcher_handles_missing_strategy_as_attempt_failure() -> None:
