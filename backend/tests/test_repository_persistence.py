@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import patch
 
 from sqlalchemy.dialects import postgresql
@@ -23,24 +24,24 @@ from app.services.types import (
 )
 
 
-class FakeScalarResult:
-    """Return the configured rows for repository scalar queries."""
+class FakeTupleResult:
+    """Return the configured rows for repository tuple queries."""
 
-    def __init__(self, rows: list[NotificationAttempt]) -> None:
+    def __init__(self, rows: list[tuple[Any, ...]]) -> None:
         self.rows = rows
 
-    def all(self) -> list[NotificationAttempt]:
-        return list(self.rows)
+    def tuples(self) -> FakeTupleResult:
+        return self
 
+    def one_or_none(self) -> tuple[Any, ...] | None:
+        if len(self.rows) == 0:
+            return None
+        if len(self.rows) > 1:
+            raise AssertionError("Expected at most one row")
+        return self.rows[0]
 
-class FakeMessageScalarResult:
-    """Return one configured message for repository scalar queries."""
-
-    def __init__(self, row: Message | None) -> None:
-        self.row = row
-
-    def one_or_none(self) -> Message | None:
-        return self.row
+    def __iter__(self) -> Iterator[tuple[Any, ...]]:
+        return iter(self.rows)
 
 
 def _build_message(*, message_id: int, created_at: datetime) -> Message:
@@ -181,19 +182,13 @@ def test_message_repository_loads_message_by_idempotency_key() -> None:
     created_at = datetime(2026, 4, 20, 19, 25, tzinfo=timezone.utc)
     session = Session()
     repository = MessageRepository(session)
-    message = Message(
-        id=22,
-        category_code="finance",
-        body="Quarterly update",
-        idempotency_key="submit-456",
-        created_at=created_at,
-    )
+    row = (22, "finance", "Quarterly update", created_at, "submit-456")
 
     with patch.object(
         session,
-        "scalars",
-        return_value=FakeMessageScalarResult(message),
-    ) as scalars_mock:
+        "execute",
+        return_value=FakeTupleResult([row]),
+    ) as execute_mock:
         result = repository.get_by_idempotency_key(idempotency_key="submit-456")
 
     assert result == PersistedMessage(
@@ -203,7 +198,7 @@ def test_message_repository_loads_message_by_idempotency_key() -> None:
         created_at=created_at,
         idempotency_key="submit-456",
     )
-    scalars_mock.assert_called_once()
+    execute_mock.assert_called_once()
     session.close()
 
 
@@ -215,13 +210,13 @@ def test_message_repository_returns_none_for_missing_idempotency_key() -> None:
 
     with patch.object(
         session,
-        "scalars",
-        return_value=FakeMessageScalarResult(None),
-    ) as scalars_mock:
+        "execute",
+        return_value=FakeTupleResult([]),
+    ) as execute_mock:
         result = repository.get_by_idempotency_key(idempotency_key="missing")
 
     assert result is None
-    scalars_mock.assert_called_once()
+    execute_mock.assert_called_once()
     session.close()
 
 
@@ -373,11 +368,23 @@ def test_notification_attempt_repository_maps_pending_attempts() -> None:
     session = Session()
     repository = NotificationAttemptRepository(session)
 
+    row = (
+        pending_attempt.id,
+        pending_attempt.message_id,
+        pending_attempt.category_code,
+        pending_attempt.message_body,
+        created_at,
+        pending_attempt.user_id,
+        pending_attempt.recipient_snapshot,
+        pending_attempt.channel_code,
+        pending_attempt.attempt_number,
+    )
+
     with patch.object(
         session,
-        "scalars",
-        return_value=FakeScalarResult([pending_attempt]),
-    ) as scalars_mock:
+        "execute",
+        return_value=FakeTupleResult([row]),
+    ) as execute_mock:
         attempts = repository.claim_pending_attempts(message_id=12, limit=10)
 
     assert attempts == [
@@ -400,8 +407,8 @@ def test_notification_attempt_repository_maps_pending_attempts() -> None:
             attempt_number=1,
         )
     ]
-    scalars_mock.assert_called_once()
-    statement = scalars_mock.call_args.args[0]
+    execute_mock.assert_called_once()
+    statement = execute_mock.call_args.args[0]
     compiled_statement = str(statement.compile(dialect=postgresql.dialect())).upper()
     assert "FOR UPDATE" in compiled_statement
     assert "SKIP LOCKED" in compiled_statement
@@ -425,11 +432,31 @@ def test_notification_attempt_repository_maps_recent_logs() -> None:
     session = Session()
     repository = NotificationAttemptRepository(session)
 
+    row = (
+        attempt.id,
+        attempt.message_id,
+        attempt.category_code,
+        attempt.message_body,
+        attempt.user_id,
+        attempt.recipient_snapshot,
+        attempt.channel_code,
+        attempt.status,
+        attempt.attempt_number,
+        attempt.attempted_at,
+        attempt.processing_started_at,
+        attempt.processed_at,
+        attempt.delivered_at,
+        attempt.last_error_at,
+        attempt.next_retry_at,
+        attempt.failure_reason,
+        attempt.provider_reference,
+    )
+
     with patch.object(
         session,
-        "scalars",
-        return_value=FakeScalarResult([attempt]),
-    ) as scalars_mock:
+        "execute",
+        return_value=FakeTupleResult([row]),
+    ) as execute_mock:
         logs = repository.list_recent(limit=10, offset=20)
 
     assert logs == [
@@ -455,7 +482,7 @@ def test_notification_attempt_repository_maps_recent_logs() -> None:
             provider_reference="email-12-3",
         )
     ]
-    scalars_mock.assert_called_once()
+    execute_mock.assert_called_once()
     session.close()
 
 

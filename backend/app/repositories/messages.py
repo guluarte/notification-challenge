@@ -20,12 +20,25 @@ class MessageRepository(BaseRepository):
     ) -> PersistedMessage | None:
         """Return the message stored for an idempotency key, if one exists."""
 
-        message = self.session.scalars(
-            select(Message).where(Message.idempotency_key == idempotency_key)
-        ).one_or_none()
-        if message is None:
+        statement = select(
+            Message.id,
+            Message.category_code,
+            Message.body,
+            Message.created_at,
+            Message.idempotency_key,
+        ).where(Message.idempotency_key == idempotency_key)
+        row = self.session.execute(statement).tuples().one_or_none()
+        if row is None:
             return None
-        return self._to_result(message)
+
+        message_id, category_code, body, created_at, row_idempotency_key = row
+        return PersistedMessage(
+            id=message_id,
+            category_code=category_code,
+            body=body,
+            created_at=created_at,
+            idempotency_key=row_idempotency_key,
+        )
 
     def create(
         self,

@@ -40,20 +40,32 @@ class SubscriberResolverService:
             )
             return []
 
-        users = self.user_repository.list_by_ids(user_ids=subscribed_user_ids)
         channel_codes_by_user_id = (
             self.channel_preference_repository.list_channel_codes_by_user_ids(
                 user_ids=subscribed_user_ids
             )
         )
+        user_ids_with_channels = [
+            user_id
+            for user_id in subscribed_user_ids
+            if len(channel_codes_by_user_id.get(user_id, ())) > 0
+        ]
+        skipped_without_channels = len(subscribed_user_ids) - len(
+            user_ids_with_channels
+        )
+        if len(user_ids_with_channels) == 0:
+            logger.info(
+                "Resolved 0 eligible subscribers for category=%s (skipped_without_channels=%s)",
+                category_code,
+                skipped_without_channels,
+            )
+            return []
+
+        users = self.user_repository.list_by_ids(user_ids=user_ids_with_channels)
 
         subscribers: list[ResolvedSubscriber] = []
-        skipped_without_channels = 0
         for user in users:
-            channel_codes = channel_codes_by_user_id.get(user.user_id, ())
-            if len(channel_codes) == 0:
-                skipped_without_channels += 1
-                continue
+            channel_codes = channel_codes_by_user_id[user.user_id]
 
             subscribers.append(
                 ResolvedSubscriber(

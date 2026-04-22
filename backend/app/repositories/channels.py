@@ -16,9 +16,11 @@ class NotificationChannelRepository(BaseRepository):
     def list_all(self) -> list[NotificationCatalogItem]:
         """Return all supported delivery channels."""
 
-        statement = select(NotificationChannel).order_by(NotificationChannel.code.asc())
-        channels = self.session.scalars(statement).all()
+        statement = select(
+            NotificationChannel.code,
+            NotificationChannel.name,
+        ).order_by(NotificationChannel.code.asc())
         return [
-            NotificationCatalogItem(code=channel.code, label=channel.name)
-            for channel in channels
+            NotificationCatalogItem(code=code, label=name)
+            for code, name in self.session.execute(statement).tuples()
         ]

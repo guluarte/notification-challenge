@@ -24,11 +24,11 @@ class NotificationCategoryRepository(BaseRepository):
     def list_all(self) -> list[NotificationCatalogItem]:
         """Return all supported message categories."""
 
-        statement = select(NotificationCategory).order_by(
-            NotificationCategory.code.asc()
-        )
-        categories = self.session.scalars(statement).all()
+        statement = select(
+            NotificationCategory.code,
+            NotificationCategory.name,
+        ).order_by(NotificationCategory.code.asc())
         return [
-            NotificationCatalogItem(code=category.code, label=category.name)
-            for category in categories
+            NotificationCatalogItem(code=code, label=name)
+            for code, name in self.session.execute(statement).tuples()
         ]

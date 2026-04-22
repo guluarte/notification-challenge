@@ -21,17 +21,19 @@ class UserRepository(BaseRepository):
         if len(user_ids) == 0:
             return []
 
-        statement = select(User).where(User.id.in_(user_ids)).order_by(User.id.asc())
-        users = self.session.scalars(statement).all()
-        return [self._to_user_profile(user) for user in users]
-
-    @staticmethod
-    def _to_user_profile(user: User) -> UserProfile:
-        """Map an ORM user to the service layer directory structure."""
-
-        return UserProfile(
-            user_id=user.id,
-            name=user.name,
-            email=user.email,
-            phone_number=user.phone_number,
+        statement = (
+            select(User.id, User.name, User.email, User.phone_number)
+            .where(User.id.in_(user_ids))
+            .order_by(User.id.asc())
         )
+        return [
+            UserProfile(
+                user_id=user_id,
+                name=name,
+                email=email,
+                phone_number=phone_number,
+            )
+            for user_id, name, email, phone_number in self.session.execute(
+                statement
+            ).tuples()
+        ]

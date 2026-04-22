@@ -25,7 +25,10 @@ class UserChannelPreferenceRepository(BaseRepository):
             return {}
 
         statement = (
-            select(UserChannelPreference)
+            select(
+                UserChannelPreference.user_id,
+                UserChannelPreference.channel_code,
+            )
             .where(UserChannelPreference.user_id.in_(user_ids))
             .order_by(
                 UserChannelPreference.user_id.asc(),
@@ -33,11 +36,8 @@ class UserChannelPreferenceRepository(BaseRepository):
             )
         )
         channel_codes_by_user_id: dict[int, list[str]] = {}
-        preferences = self.session.scalars(statement).all()
-        for preference in preferences:
-            channel_codes_by_user_id.setdefault(preference.user_id, []).append(
-                preference.channel_code
-            )
+        for user_id, channel_code in self.session.execute(statement).tuples():
+            channel_codes_by_user_id.setdefault(user_id, []).append(channel_code)
 
         return {
             user_id: tuple(channel_codes)

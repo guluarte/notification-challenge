@@ -6,9 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import joinedload
-
-from app.models import NotificationAttempt
+from app.models import Message, NotificationAttempt
 from app.models.enums import DeliveryStatus
 from app.services.types import (
     MessageDispatchState,
@@ -57,8 +55,18 @@ class NotificationAttemptRepository(BaseRepository):
 
         ready_at = datetime.now(tz=timezone.utc)
         statement = (
-            select(NotificationAttempt)
-            .options(joinedload(NotificationAttempt.message))
+            select(
+                NotificationAttempt.id,
+                NotificationAttempt.message_id,
+                NotificationAttempt.category_code,
+                NotificationAttempt.message_body,
+                Message.created_at,
+                NotificationAttempt.user_id,
+                NotificationAttempt.recipient_snapshot,
+                NotificationAttempt.channel_code,
+                NotificationAttempt.attempt_number,
+            )
+            .join(Message, NotificationAttempt.message_id == Message.id)
             .where(NotificationAttempt.status == DeliveryStatus.PENDING.value)
             .where(
                 or_(
@@ -77,8 +85,30 @@ class NotificationAttemptRepository(BaseRepository):
         if limit is not None:
             statement = statement.limit(limit)
 
-        attempts = self.session.scalars(statement).all()
-        return [self._to_pending_attempt(attempt) for attempt in attempts]
+        return [
+            self._to_pending_attempt(
+                attempt_id=attempt_id,
+                message_id=row_message_id,
+                category_code=category_code,
+                message_body=message_body,
+                message_created_at=message_created_at,
+                user_id=user_id,
+                recipient_snapshot=recipient_snapshot,
+                channel_code=channel_code,
+                attempt_number=attempt_number,
+            )
+            for (
+                attempt_id,
+                row_message_id,
+                category_code,
+                message_body,
+                message_created_at,
+                user_id,
+                recipient_snapshot,
+                channel_code,
+                attempt_number,
+            ) in self.session.execute(statement).tuples()
+        ]
 
     def mark_processing_started(
         self,
@@ -144,8 +174,25 @@ class NotificationAttemptRepository(BaseRepository):
         """Return notification attempts sorted from newest to oldest."""
 
         statement = (
-            select(NotificationAttempt)
-            .options(joinedload(NotificationAttempt.message))
+            select(
+                NotificationAttempt.id,
+                NotificationAttempt.message_id,
+                NotificationAttempt.category_code,
+                NotificationAttempt.message_body,
+                NotificationAttempt.user_id,
+                NotificationAttempt.recipient_snapshot,
+                NotificationAttempt.channel_code,
+                NotificationAttempt.status,
+                NotificationAttempt.attempt_number,
+                NotificationAttempt.attempted_at,
+                NotificationAttempt.processing_started_at,
+                NotificationAttempt.processed_at,
+                NotificationAttempt.delivered_at,
+                NotificationAttempt.last_error_at,
+                NotificationAttempt.next_retry_at,
+                NotificationAttempt.failure_reason,
+                NotificationAttempt.provider_reference,
+            )
             .order_by(
                 NotificationAttempt.attempted_at.desc(),
                 NotificationAttempt.id.desc(),
@@ -153,8 +200,46 @@ class NotificationAttemptRepository(BaseRepository):
             .limit(limit)
             .offset(offset)
         )
-        attempts = self.session.scalars(statement).all()
-        return [self._to_log_entry(attempt) for attempt in attempts]
+        return [
+            self._to_log_entry(
+                attempt_id=attempt_id,
+                message_id=message_id,
+                category_code=category_code,
+                message_body=message_body,
+                user_id=user_id,
+                recipient_snapshot=recipient_snapshot,
+                channel_code=channel_code,
+                status=status,
+                attempt_number=attempt_number,
+                attempted_at=attempted_at,
+                processing_started_at=processing_started_at,
+                processed_at=processed_at,
+                delivered_at=delivered_at,
+                last_error_at=last_error_at,
+                next_retry_at=next_retry_at,
+                failure_reason=failure_reason,
+                provider_reference=provider_reference,
+            )
+            for (
+                attempt_id,
+                message_id,
+                category_code,
+                message_body,
+                user_id,
+                recipient_snapshot,
+                channel_code,
+                status,
+                attempt_number,
+                attempted_at,
+                processing_started_at,
+                processed_at,
+                delivered_at,
+                last_error_at,
+                next_retry_at,
+                failure_reason,
+                provider_reference,
+            ) in self.session.execute(statement).tuples()
+        ]
 
     def count_all(self) -> int:
         """Return the total number of notification attempt rows."""
@@ -208,53 +293,79 @@ class NotificationAttemptRepository(BaseRepository):
 
     @staticmethod
     def _to_pending_attempt(
-        attempt: NotificationAttempt,
+        *,
+        attempt_id: int,
+        message_id: int,
+        category_code: str,
+        message_body: str,
+        message_created_at: datetime,
+        user_id: int,
+        recipient_snapshot: dict[str, Any],
+        channel_code: str,
+        attempt_number: int,
     ) -> PendingNotificationAttempt:
-        """Map an ORM attempt record to the pending dispatch structure."""
+        """Map projected attempt columns to the pending dispatch structure."""
 
-        snapshot = attempt.recipient_snapshot
         return PendingNotificationAttempt(
-            attempt_id=attempt.id,
+            attempt_id=attempt_id,
             message=PersistedMessage(
-                id=attempt.message_id,
-                category_code=attempt.category_code,
-                body=attempt.message_body,
-                created_at=attempt.message.created_at,
+                id=message_id,
+                category_code=category_code,
+                body=message_body,
+                created_at=message_created_at,
             ),
             subscriber=ResolvedSubscriber(
-                user_id=attempt.user_id,
-                name=str(snapshot.get("name", "")),
-                email=str(snapshot.get("email", "")),
-                phone_number=str(snapshot.get("phone_number", "")),
-                channel_codes=(attempt.channel_code,),
+                user_id=user_id,
+                name=str(recipient_snapshot.get("name", "")),
+                email=str(recipient_snapshot.get("email", "")),
+                phone_number=str(recipient_snapshot.get("phone_number", "")),
+                channel_codes=(channel_code,),
             ),
-            channel_code=attempt.channel_code,
-            attempt_number=attempt.attempt_number,
+            channel_code=channel_code,
+            attempt_number=attempt_number,
         )
 
     @staticmethod
-    def _to_log_entry(attempt: NotificationAttempt) -> NotificationLogEntry:
-        """Map an ORM attempt record to the service log structure."""
+    def _to_log_entry(
+        *,
+        attempt_id: int,
+        message_id: int,
+        category_code: str,
+        message_body: str,
+        user_id: int,
+        recipient_snapshot: dict[str, Any],
+        channel_code: str,
+        status: str,
+        attempt_number: int,
+        attempted_at: datetime,
+        processing_started_at: datetime | None,
+        processed_at: datetime | None,
+        delivered_at: datetime | None,
+        last_error_at: datetime | None,
+        next_retry_at: datetime | None,
+        failure_reason: str | None,
+        provider_reference: str | None,
+    ) -> NotificationLogEntry:
+        """Map projected attempt columns to the service log structure."""
 
-        snapshot = attempt.recipient_snapshot
         return NotificationLogEntry(
-            attempt_id=attempt.id,
-            message_id=attempt.message_id,
-            category_code=attempt.category_code,
-            body=attempt.message_body,
-            user_id=attempt.user_id,
-            user_name=str(snapshot.get("name", "")),
-            user_email=str(snapshot.get("email", "")),
-            user_phone_number=str(snapshot.get("phone_number", "")),
-            channel_code=attempt.channel_code,
-            status=DeliveryStatus(attempt.status),
-            attempt_number=attempt.attempt_number,
-            attempted_at=attempt.attempted_at,
-            processing_started_at=attempt.processing_started_at,
-            processed_at=attempt.processed_at,
-            delivered_at=attempt.delivered_at,
-            last_error_at=attempt.last_error_at,
-            next_retry_at=attempt.next_retry_at,
-            failure_reason=attempt.failure_reason,
-            provider_reference=attempt.provider_reference,
+            attempt_id=attempt_id,
+            message_id=message_id,
+            category_code=category_code,
+            body=message_body,
+            user_id=user_id,
+            user_name=str(recipient_snapshot.get("name", "")),
+            user_email=str(recipient_snapshot.get("email", "")),
+            user_phone_number=str(recipient_snapshot.get("phone_number", "")),
+            channel_code=channel_code,
+            status=DeliveryStatus(status),
+            attempt_number=attempt_number,
+            attempted_at=attempted_at,
+            processing_started_at=processing_started_at,
+            processed_at=processed_at,
+            delivered_at=delivered_at,
+            last_error_at=last_error_at,
+            next_retry_at=next_retry_at,
+            failure_reason=failure_reason,
+            provider_reference=provider_reference,
         )

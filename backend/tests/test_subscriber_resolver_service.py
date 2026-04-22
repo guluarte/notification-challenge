@@ -12,12 +12,16 @@ class FakeUserRepository:
     """User repository double for subscriber resolution tests."""
 
     def __init__(self, users: list[UserProfile]) -> None:
-        self.users = users
+        self.users_by_id = {user.user_id: user for user in users}
         self.requested_user_ids: list[int] = []
 
     def list_by_ids(self, *, user_ids: Sequence[int]) -> list[UserProfile]:
         self.requested_user_ids = list(user_ids)
-        return self.users
+        return [
+            self.users_by_id[user_id]
+            for user_id in user_ids
+            if user_id in self.users_by_id
+        ]
 
 
 class FakeSubscriptionRepository:
@@ -128,7 +132,31 @@ def test_subscriber_resolver_filters_out_subscribers_without_channels() -> None:
         )
     ]
     assert subscription_repository.requested_category_code == "sports"
-    assert user_repository.requested_user_ids == [1, 2]
+    assert user_repository.requested_user_ids == [1]
+    assert channel_preference_repository.requested_user_ids == [1, 2]
+
+
+def test_subscriber_resolver_skips_user_lookup_when_no_subscribers_have_channels() -> (
+    None
+):
+    """Users should not be loaded when subscriptions have no delivery channels."""
+
+    user_repository = FakeUserRepository(users=[])
+    subscription_repository = FakeSubscriptionRepository(user_ids=[1, 2])
+    channel_preference_repository = FakeChannelPreferenceRepository(
+        channel_codes_by_user_id={}
+    )
+    service = SubscriberResolverService(
+        user_repository=user_repository,
+        subscription_repository=subscription_repository,
+        channel_preference_repository=channel_preference_repository,
+    )
+
+    result = service.resolve_subscribers(category_code="sports")
+
+    assert result == []
+    assert subscription_repository.requested_category_code == "sports"
+    assert user_repository.requested_user_ids == []
     assert channel_preference_repository.requested_user_ids == [1, 2]
 
 
