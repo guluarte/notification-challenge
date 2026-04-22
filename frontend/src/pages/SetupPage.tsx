@@ -9,7 +9,7 @@ import {
 	getFirstCategoryCode,
 	getLoadedNotificationCatalog,
 	hasCategoryCode,
-} from '../constants/notificationCatalog'
+} from '../lib/notificationCatalog'
 import { useCreateMessageMutation } from '../hooks/useCreateMessageMutation'
 import { useNotificationCatalog } from '../hooks/useNotificationCatalog'
 import { notificationLogsQueryKey } from '../hooks/useNotificationLogs'

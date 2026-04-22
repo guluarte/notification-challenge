@@ -23,7 +23,7 @@ import {
 	getChannelLabel,
 	getLoadedNotificationCatalog,
 	statusLabelsByCode,
-} from '@/constants/notificationCatalog'
+} from '@/lib/notificationCatalog'
 import { useNotificationCatalog } from '@/hooks/useNotificationCatalog'
 import { useNotificationLogState } from '../providers/NotificationLogProvider'
 import type {
