@@ -6,9 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies.services import (
     get_message_service,
+    get_notification_catalog_service,
     get_notification_log_service,
 )
 from app.repositories.categories import NotificationCategoryRepository
+from app.repositories.channels import NotificationChannelRepository
 from app.repositories.messages import MessageRepository
 from app.repositories.notification_deliveries import NotificationAttemptRepository
 from app.repositories.user_category_subscriptions import (
@@ -17,6 +19,7 @@ from app.repositories.user_category_subscriptions import (
 from app.repositories.user_channel_preferences import UserChannelPreferenceRepository
 from app.repositories.users import UserRepository
 from app.services.message_service import MessageService
+from app.services.notification_catalog_service import NotificationCatalogService
 from app.services.notification_dispatcher import NotificationDispatcherService
 from app.services.notification_log_service import NotificationLogService
 from app.services.subscriber_resolver import SubscriberResolverService
@@ -83,5 +86,21 @@ def test_get_notification_log_service_uses_attempt_repository() -> None:
     assert isinstance(service, NotificationLogService)
     assert isinstance(service.attempt_repository, NotificationAttemptRepository)
     assert service.attempt_repository.session is session
+
+    session.close()
+
+
+def test_get_notification_catalog_service_uses_catalog_repositories() -> None:
+    """The catalog dependency should compose category and channel repositories."""
+
+    session = Session()
+
+    service = get_notification_catalog_service(session)
+
+    assert isinstance(service, NotificationCatalogService)
+    assert isinstance(service.category_repository, NotificationCategoryRepository)
+    assert service.category_repository.session is session
+    assert isinstance(service.channel_repository, NotificationChannelRepository)
+    assert service.channel_repository.session is session
 
     session.close()

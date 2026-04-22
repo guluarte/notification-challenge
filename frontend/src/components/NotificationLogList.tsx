@@ -18,12 +18,19 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import {
-	categoryLabelsByCode,
-	channelLabelsByCode,
+	createLabelsByCode,
+	getCategoryLabel,
+	getChannelLabel,
+	getLoadedNotificationCatalog,
 	statusLabelsByCode,
 } from '@/constants/notificationCatalog'
+import { useNotificationCatalog } from '@/hooks/useNotificationCatalog'
 import { useNotificationLogState } from '../providers/NotificationLogProvider'
-import type { DeliveryStatus, LogPageSize } from '../services/notificationApi'
+import type {
+	DeliveryStatus,
+	LogPageSize,
+	NotificationLogItem,
+} from '../services/notificationApi'
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
 	dateStyle: 'medium',
@@ -48,6 +55,34 @@ function getStatusClassName(status: DeliveryStatus): string {
 	}
 
 	return 'bg-amber-100 text-amber-900 ring-1 ring-amber-900/10'
+}
+
+function getRefreshIconClassName(isRefreshing: boolean): string {
+	if (isRefreshing) {
+		return 'size-4 animate-spin'
+	}
+	return 'size-4'
+}
+
+function getRefreshButtonLabel(isRefreshing: boolean): string {
+	if (isRefreshing) {
+		return 'Refreshing...'
+	}
+	return 'Refresh logs'
+}
+
+function getProcessedTimestamp(item: NotificationLogItem): string | null {
+	if (item.processed_at !== null) {
+		return item.processed_at
+	}
+	return item.delivered_at
+}
+
+function getProviderReferenceLabel(providerReference: string | null): string {
+	if (providerReference === null) {
+		return 'Not provided'
+	}
+	return providerReference
 }
 
 function parseLogPageSize(
@@ -118,6 +153,10 @@ function LogPaginationBar({ placement }: LogPaginationBarProps) {
 }
 
 export function NotificationLogList() {
+	const catalogQuery = useNotificationCatalog()
+	const catalog = getLoadedNotificationCatalog(catalogQuery.data)
+	const categoryLabelsByCode = createLabelsByCode(catalog.categories)
+	const channelLabelsByCode = createLabelsByCode(catalog.channels)
 	const {
 		items,
 		isLoading,
@@ -187,10 +226,8 @@ export function NotificationLogList() {
 							disabled={isRefreshing}
 							className="h-11 rounded-full border-stone-300 bg-white/90 px-5 text-stone-900 hover:bg-stone-100"
 						>
-							<RefreshCw
-								className={isRefreshing ? 'size-4 animate-spin' : 'size-4'}
-							/>
-							{isRefreshing ? 'Refreshing...' : 'Refresh logs'}
+							<RefreshCw className={getRefreshIconClassName(isRefreshing)} />
+							{getRefreshButtonLabel(isRefreshing)}
 						</Button>
 					</div>
 				</div>
@@ -199,7 +236,7 @@ export function NotificationLogList() {
 			<CardContent className="grid gap-4">
 				<LogPaginationBar placement="top" />
 
-				{errorMessage ? (
+				{errorMessage !== null && (
 					<div
 						className="animate-in fade-in-0 slide-in-from-bottom-2 rounded-[1.4rem] border border-red-300/70 bg-red-50/90 px-4 py-3 text-red-900 shadow-sm"
 						role="alert"
@@ -207,18 +244,18 @@ export function NotificationLogList() {
 						<p className="font-semibold">Log history unavailable</p>
 						<p className="mt-1 text-sm leading-6">{errorMessage}</p>
 					</div>
-				) : null}
+				)}
 
-				{isLoading && items.length === 0 ? (
+				{isLoading && items.length === 0 && (
 					<div className="rounded-[1.6rem] border border-dashed border-stone-300 bg-stone-100/70 px-6 py-8 text-center">
 						<p className="font-medium text-stone-900">Loading activity</p>
 						<p className="mt-2 text-sm leading-6 text-stone-500">
 							The latest notification attempts are being loaded.
 						</p>
 					</div>
-				) : null}
+				)}
 
-				{!isLoading && !errorMessage && items.length === 0 ? (
+				{!isLoading && errorMessage === null && items.length === 0 && (
 					<div className="rounded-[1.6rem] border border-dashed border-stone-300 bg-stone-100/70 px-6 py-8 text-center">
 						<p className="font-medium text-stone-900">
 							No delivery attempts yet
@@ -227,9 +264,9 @@ export function NotificationLogList() {
 							Submit the first message to populate the audit history.
 						</p>
 					</div>
-				) : null}
+				)}
 
-				{items.length > 0 ? (
+				{items.length > 0 && (
 					<ol className="grid gap-4">
 						{items.map((item) => (
 							<li
@@ -243,13 +280,13 @@ export function NotificationLogList() {
 												variant="outline"
 												className="border-stone-300 bg-white/90 text-stone-700"
 											>
-												{categoryLabelsByCode[item.category]}
+												{getCategoryLabel(categoryLabelsByCode, item.category)}
 											</Badge>
 											<Badge
 												variant="outline"
 												className="border-stone-300 bg-white/90 text-stone-700"
 											>
-												{channelLabelsByCode[item.channel]}
+												{getChannelLabel(channelLabelsByCode, item.channel)}
 											</Badge>
 											<Badge className={getStatusClassName(item.status)}>
 												{statusLabelsByCode[item.status]}
@@ -300,7 +337,7 @@ export function NotificationLogList() {
 											Processed
 										</dt>
 										<dd className="text-stone-700">
-											{formatTimestamp(item.processed_at ?? item.delivered_at)}
+											{formatTimestamp(getProcessedTimestamp(item))}
 										</dd>
 									</div>
 									<div className="space-y-1">
@@ -308,21 +345,21 @@ export function NotificationLogList() {
 											Provider ref
 										</dt>
 										<dd className="text-stone-700">
-											{item.provider_reference ?? 'Not provided'}
+											{getProviderReferenceLabel(item.provider_reference)}
 										</dd>
 									</div>
 								</dl>
 
-								{item.failure_reason ? (
+								{item.failure_reason !== null && (
 									<div className="mt-4 rounded-2xl border border-red-200/80 bg-red-50/80 px-4 py-3 text-sm text-red-900">
 										<p className="font-medium">Failure reason</p>
 										<p className="mt-1 leading-6">{item.failure_reason}</p>
 									</div>
-								) : null}
+								)}
 							</li>
 						))}
 					</ol>
-				) : null}
+				)}
 
 				<LogPaginationBar placement="bottom" />
 			</CardContent>

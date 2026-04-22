@@ -1,4 +1,4 @@
-"""Route-level tests for message and log endpoints."""
+"""Route-level tests for catalog, message, and log endpoints."""
 
 from __future__ import annotations
 
@@ -11,7 +11,11 @@ from typing import Any
 
 from starlette.types import Message, Scope
 
-from app.api.dependencies import get_message_service, get_notification_log_service
+from app.api.dependencies import (
+    get_message_service,
+    get_notification_catalog_service,
+    get_notification_log_service,
+)
 from app.core.exceptions import (
     IdempotencyConflictError,
     InfrastructureError,
@@ -21,6 +25,8 @@ from app.main import create_app
 from app.models.enums import DeliveryStatus
 from app.services.types import (
     MessageCreationResult,
+    NotificationCatalog,
+    NotificationCatalogItem,
     NotificationLogEntry,
     NotificationLogPage,
 )
@@ -159,6 +165,18 @@ class FakeNotificationLogService:
         )
 
 
+@dataclass
+class FakeNotificationCatalogService:
+    """Catalog service double for route tests."""
+
+    catalog: NotificationCatalog
+
+    def get_catalog(self) -> NotificationCatalog:
+        """Return the configured catalog response."""
+
+        return self.catalog
+
+
 def _message_service_override(
     service: FakeMessageService,
 ) -> Callable[[], FakeMessageService]:
@@ -169,6 +187,55 @@ def _log_service_override(
     service: FakeNotificationLogService,
 ) -> Callable[[], FakeNotificationLogService]:
     return lambda: service
+
+
+def _catalog_service_override(
+    service: FakeNotificationCatalogService,
+) -> Callable[[], FakeNotificationCatalogService]:
+    return lambda: service
+
+
+def test_catalog_route_returns_backend_supported_options() -> None:
+    """The route should expose categories and channels from the catalog service."""
+
+    service = FakeNotificationCatalogService(
+        catalog=NotificationCatalog(
+            categories=[
+                NotificationCatalogItem(code="sports", label="Sports"),
+                NotificationCatalogItem(code="finance", label="Finance"),
+                NotificationCatalogItem(code="movies", label="Movies"),
+            ],
+            channels=[
+                NotificationCatalogItem(code="sms", label="SMS"),
+                NotificationCatalogItem(code="email", label="E-Mail"),
+                NotificationCatalogItem(code="push", label="Push Notification"),
+            ],
+        )
+    )
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="GET",
+            path="/v1/catalog",
+            app_overrides={
+                get_notification_catalog_service: _catalog_service_override(service)
+            },
+        )
+    )
+
+    assert status_code == 200
+    assert payload == {
+        "categories": [
+            {"code": "sports", "label": "Sports"},
+            {"code": "finance", "label": "Finance"},
+            {"code": "movies", "label": "Movies"},
+        ],
+        "channels": [
+            {"code": "sms", "label": "SMS"},
+            {"code": "email", "label": "E-Mail"},
+            {"code": "push", "label": "Push Notification"},
+        ],
+    }
 
 
 def test_create_message_route_returns_created_payload() -> None:

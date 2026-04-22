@@ -29,8 +29,33 @@ function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
 	})
 }
 
+const catalogPayload = {
+	categories: [
+		{ code: 'sports', label: 'Sports' },
+		{ code: 'finance', label: 'Finance' },
+		{ code: 'movies', label: 'Movies' },
+	],
+	channels: [
+		{ code: 'sms', label: 'SMS' },
+		{ code: 'email', label: 'E-Mail' },
+		{ code: 'push', label: 'Push Notification' },
+	],
+}
+
 function isRequestInit(value: unknown): value is RequestInit {
 	return value !== null && typeof value === 'object'
+}
+
+function getRequestUrl(input: unknown): string {
+	if (typeof input === 'string') {
+		return input
+	}
+
+	if (input instanceof Request) {
+		return input.url
+	}
+
+	throw new Error('Expected fetch call to include a request URL')
 }
 
 function getIdempotencyKeyFromCall(call: ReadonlyArray<unknown>): string {
@@ -51,40 +76,43 @@ describe('SetupPage', () => {
 	it('renders the configured application, pagination controls, and audit items', async () => {
 		vi.stubEnv('VITE_APP_NAME', 'Notification Control Center')
 		vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:9000/v1')
-		const fetchMock = vi.fn(() =>
-			Promise.resolve(
-				jsonResponse({
-					items: [
-						{
-							attempt_id: 18,
-							message_id: 4,
-							category: 'sports',
-							body: 'Team A won the championship',
-							user: {
-								id: 1,
-								name: 'Alex Morgan',
-								email: 'alex.morgan@example.com',
-								phone_number: '+15550000001',
-							},
-							channel: 'email',
-							status: 'sent',
-							attempt_number: 1,
-							attempted_at: '2026-04-20T17:05:00Z',
-							processing_started_at: '2026-04-20T17:05:01Z',
-							processed_at: '2026-04-20T17:05:02Z',
-							delivered_at: '2026-04-20T17:05:02Z',
-							last_error_at: null,
-							next_retry_at: null,
-							failure_reason: null,
-							provider_reference: 'email-4-1',
-						},
-					],
-					total: 1,
-					limit: 10,
-					offset: 0,
-				}),
-			),
-		)
+		const logsPayload = {
+			items: [
+				{
+					attempt_id: 18,
+					message_id: 4,
+					category: 'sports',
+					body: 'Team A won the championship',
+					user: {
+						id: 1,
+						name: 'Alex Morgan',
+						email: 'alex.morgan@example.com',
+						phone_number: '+15550000001',
+					},
+					channel: 'email',
+					status: 'sent',
+					attempt_number: 1,
+					attempted_at: '2026-04-20T17:05:00Z',
+					processing_started_at: '2026-04-20T17:05:01Z',
+					processed_at: '2026-04-20T17:05:02Z',
+					delivered_at: '2026-04-20T17:05:02Z',
+					last_error_at: null,
+					next_retry_at: null,
+					failure_reason: null,
+					provider_reference: 'email-4-1',
+				},
+			],
+			total: 1,
+			limit: 10,
+			offset: 0,
+		}
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:9000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			return Promise.resolve(jsonResponse(logsPayload))
+		})
 		vi.stubGlobal('fetch', fetchMock)
 
 		renderSetupPage()
@@ -114,6 +142,7 @@ describe('SetupPage', () => {
 		expect(screen.getByRole('button', { name: 'Send message' })).toHaveClass(
 			'cursor-pointer',
 		)
+		expect(fetchMock).toHaveBeenCalledWith('http://localhost:9000/v1/catalog')
 		expect(fetchMock).toHaveBeenCalledWith(
 			'http://localhost:9000/v1/logs?limit=10&offset=0',
 		)
@@ -141,16 +170,20 @@ describe('SetupPage', () => {
 	})
 
 	it('validates blank messages before running the mutation', async () => {
-		const fetchMock = vi.fn(() =>
-			Promise.resolve(
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:8000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			return Promise.resolve(
 				jsonResponse({
 					items: [],
 					total: 0,
 					limit: 10,
 					offset: 0,
 				}),
-			),
-		)
+			)
+		})
 		vi.stubGlobal('fetch', fetchMock)
 
 		renderSetupPage()
@@ -165,67 +198,77 @@ describe('SetupPage', () => {
 		expect(
 			screen.getByText('Message body must not be blank.'),
 		).toBeInTheDocument()
-		expect(fetchMock).toHaveBeenCalledTimes(1)
+		expect(fetchMock).toHaveBeenCalledTimes(2)
 	})
 
 	it('submits a message through a mutation and refreshes the logs query', async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
-				jsonResponse({
-					items: [],
-					total: 0,
-					limit: 10,
-					offset: 0,
-				}),
-			)
-			.mockResolvedValueOnce(
-				jsonResponse(
+		const logResponses = [
+			{
+				items: [],
+				total: 0,
+				limit: 10,
+				offset: 0,
+			},
+			{
+				items: [
 					{
+						attempt_id: 22,
 						message_id: 12,
 						category: 'sports',
 						body: 'Team A won',
-						total_users: 2,
-						total_attempts: 3,
-						sent: 2,
-						failed: 1,
-						created_at: '2026-04-20T17:10:00Z',
+						user: {
+							id: 3,
+							name: 'Sam Rivera',
+							email: 'sam.rivera@example.com',
+							phone_number: '+15550001003',
+						},
+						channel: 'push',
+						status: 'sent',
+						attempt_number: 1,
+						attempted_at: '2026-04-20T17:10:02Z',
+						processing_started_at: '2026-04-20T17:10:03Z',
+						processed_at: '2026-04-20T17:10:04Z',
+						delivered_at: '2026-04-20T17:10:04Z',
+						last_error_at: null,
+						next_retry_at: null,
+						failure_reason: null,
+						provider_reference: 'push-12-1',
 					},
-					{ status: 201 },
-				),
-			)
-			.mockResolvedValueOnce(
-				jsonResponse({
-					items: [
+				],
+				total: 1,
+				limit: 10,
+				offset: 0,
+			},
+		]
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:8000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			if (url === 'http://localhost:8000/v1/messages') {
+				return Promise.resolve(
+					jsonResponse(
 						{
-							attempt_id: 22,
 							message_id: 12,
 							category: 'sports',
 							body: 'Team A won',
-							user: {
-								id: 3,
-								name: 'Sam Rivera',
-								email: 'sam.rivera@example.com',
-								phone_number: '+15550001003',
-							},
-							channel: 'push',
-							status: 'sent',
-							attempt_number: 1,
-							attempted_at: '2026-04-20T17:10:02Z',
-							processing_started_at: '2026-04-20T17:10:03Z',
-							processed_at: '2026-04-20T17:10:04Z',
-							delivered_at: '2026-04-20T17:10:04Z',
-							last_error_at: null,
-							next_retry_at: null,
-							failure_reason: null,
-							provider_reference: 'push-12-1',
+							total_users: 2,
+							total_attempts: 3,
+							sent: 2,
+							failed: 1,
+							created_at: '2026-04-20T17:10:00Z',
 						},
-					],
-					total: 1,
-					limit: 10,
-					offset: 0,
-				}),
-			)
+						{ status: 201 },
+					),
+				)
+			}
+
+			const logResponse = logResponses.shift()
+			if (logResponse === undefined) {
+				throw new Error('Expected queued log response')
+			}
+			return Promise.resolve(jsonResponse(logResponse))
+		})
 		vi.stubGlobal('fetch', fetchMock)
 
 		renderSetupPage()
@@ -243,15 +286,19 @@ describe('SetupPage', () => {
 		expect(await screen.findByText('Sam Rivera')).toBeInTheDocument()
 		expect(await screen.findByText('push-12-1')).toBeInTheDocument()
 		await waitFor(() => {
-			expect(fetchMock).toHaveBeenCalledTimes(3)
+			expect(fetchMock).toHaveBeenCalledTimes(4)
 		})
 		expect(fetchMock).toHaveBeenNthCalledWith(
 			1,
+			'http://localhost:8000/v1/catalog',
+		)
+		expect(fetchMock).toHaveBeenNthCalledWith(
+			2,
 			'http://localhost:8000/v1/logs?limit=10&offset=0',
 		)
 
 		expect(fetchMock).toHaveBeenNthCalledWith(
-			2,
+			3,
 			'http://localhost:8000/v1/messages',
 			{
 				method: 'POST',
@@ -266,15 +313,40 @@ describe('SetupPage', () => {
 			},
 		)
 		expect(fetchMock).toHaveBeenNthCalledWith(
-			3,
+			4,
 			'http://localhost:8000/v1/logs?limit=10&offset=0',
 		)
 	})
 
 	it('reuses the idempotency key when retrying the same failed submission', async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
+		let messageAttemptCount = 0
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:8000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			if (url === 'http://localhost:8000/v1/messages') {
+				messageAttemptCount += 1
+				if (messageAttemptCount === 1) {
+					return Promise.reject(new Error('network unavailable'))
+				}
+				return Promise.resolve(
+					jsonResponse(
+						{
+							message_id: 12,
+							category: 'sports',
+							body: 'Team A won',
+							total_users: 2,
+							total_attempts: 3,
+							sent: 2,
+							failed: 1,
+							created_at: '2026-04-20T17:10:00Z',
+						},
+						{ status: 201 },
+					),
+				)
+			}
+			return Promise.resolve(
 				jsonResponse({
 					items: [],
 					total: 0,
@@ -282,30 +354,7 @@ describe('SetupPage', () => {
 					offset: 0,
 				}),
 			)
-			.mockRejectedValueOnce(new Error('network unavailable'))
-			.mockResolvedValueOnce(
-				jsonResponse(
-					{
-						message_id: 12,
-						category: 'sports',
-						body: 'Team A won',
-						total_users: 2,
-						total_attempts: 3,
-						sent: 2,
-						failed: 1,
-						created_at: '2026-04-20T17:10:00Z',
-					},
-					{ status: 201 },
-				),
-			)
-			.mockResolvedValueOnce(
-				jsonResponse({
-					items: [],
-					total: 0,
-					limit: 10,
-					offset: 0,
-				}),
-			)
+		})
 		vi.stubGlobal('fetch', fetchMock)
 
 		renderSetupPage()
@@ -327,11 +376,14 @@ describe('SetupPage', () => {
 			'Delivered 2 of 3 attempts across 2 subscribed users.',
 		)
 		await waitFor(() => {
-			expect(fetchMock).toHaveBeenCalledTimes(4)
+			expect(fetchMock).toHaveBeenCalledTimes(5)
 		})
 
-		const firstSubmitCall = fetchMock.mock.calls[1]
-		const secondSubmitCall = fetchMock.mock.calls[2]
+		const submitCalls = fetchMock.mock.calls.filter((call) => {
+			return getRequestUrl(call[0]) === 'http://localhost:8000/v1/messages'
+		})
+		const firstSubmitCall = submitCalls[0]
+		const secondSubmitCall = submitCalls[1]
 		if (firstSubmitCall === undefined || secondSubmitCall === undefined) {
 			throw new Error('Expected two submit requests')
 		}
@@ -342,9 +394,28 @@ describe('SetupPage', () => {
 	})
 
 	it('shows API errors from the mutation response', async () => {
-		const fetchMock = vi
-			.fn()
-			.mockResolvedValueOnce(
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:8000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			if (url === 'http://localhost:8000/v1/messages') {
+				return Promise.resolve(
+					jsonResponse(
+						{
+							detail: 'Request validation failed.',
+							errors: [
+								{
+									field: 'body',
+									message: 'Value error, Message body must not be blank.',
+								},
+							],
+						},
+						{ status: 422 },
+					),
+				)
+			}
+			return Promise.resolve(
 				jsonResponse({
 					items: [],
 					total: 0,
@@ -352,20 +423,7 @@ describe('SetupPage', () => {
 					offset: 0,
 				}),
 			)
-			.mockResolvedValueOnce(
-				jsonResponse(
-					{
-						detail: 'Request validation failed.',
-						errors: [
-							{
-								field: 'body',
-								message: 'Value error, Message body must not be blank.',
-							},
-						],
-					},
-					{ status: 422 },
-				),
-			)
+		})
 		vi.stubGlobal('fetch', fetchMock)
 
 		renderSetupPage()
@@ -387,16 +445,20 @@ describe('SetupPage', () => {
 	it('shows query errors when the audit log cannot be loaded', async () => {
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(() =>
-				Promise.resolve(
+			vi.fn((input: RequestInfo | URL) => {
+				const url = getRequestUrl(input)
+				if (url === 'http://localhost:8000/v1/catalog') {
+					return Promise.resolve(jsonResponse(catalogPayload))
+				}
+				return Promise.resolve(
 					jsonResponse(
 						{
 							detail: 'The notification logs could not be loaded.',
 						},
 						{ status: 500 },
 					),
-				),
-			),
+				)
+			}),
 		)
 
 		renderSetupPage()

@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from .message_service import MessageServiceDep, get_message_service
+from .notification_catalog_service import (
+    NotificationCatalogServiceDep,
+    get_notification_catalog_service,
+)
 from .notification_log_service import (
     NotificationLogServiceDep,
     get_notification_log_service,
@@ -10,7 +14,9 @@ from .notification_log_service import (
 
 __all__ = [
     "MessageServiceDep",
+    "NotificationCatalogServiceDep",
     "NotificationLogServiceDep",
     "get_message_service",
+    "get_notification_catalog_service",
     "get_notification_log_service",
 ]

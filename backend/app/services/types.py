@@ -131,6 +131,22 @@ class NotificationLogPage:
     offset: int
 
 
+@dataclass(frozen=True, slots=True)
+class NotificationCatalogItem:
+    """Catalog option returned by the repository layer."""
+
+    code: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationCatalog:
+    """Supported message categories and delivery channels."""
+
+    categories: list[NotificationCatalogItem]
+    channels: list[NotificationCatalogItem]
+
+
 class SessionProtocol(Protocol):
     """Behavior the message service requires from a session."""
 
@@ -148,6 +164,14 @@ class CategoryRepositoryProtocol(Protocol):
 
     def exists(self, category_code: str) -> bool:
         """Return whether the category exists."""
+        ...
+
+
+class CatalogOptionRepositoryProtocol(Protocol):
+    """Repository contract for catalog option lists."""
+
+    def list_all(self) -> list[NotificationCatalogItem]:
+        """Return every available catalog option."""
         ...
 
 

@@ -18,7 +18,10 @@ import {
 	SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { MessageCategoryCode } from '../services/notificationApi'
+import type {
+	MessageCategoryCode,
+	MessageCategoryOption,
+} from '../services/notificationApi'
 
 type FormSubmitHandler = NonNullable<ComponentProps<'form'>['onSubmit']>
 
@@ -29,15 +32,55 @@ export interface MessageComposerFeedback {
 }
 
 interface MessageComposerProps {
-	categories: { code: MessageCategoryCode; label: string }[]
-	selectedCategory: MessageCategoryCode
+	categories: MessageCategoryOption[]
+	selectedCategory: MessageCategoryCode | null
 	body: string
 	bodyError?: string
 	isSubmitting: boolean
+	isSubmitDisabled: boolean
+	catalogStatusMessage: string | null
 	feedback: MessageComposerFeedback | null
 	onCategoryChange: (category: string) => void
 	onBodyChange: (body: string) => void
 	onSubmit: FormSubmitHandler
+}
+
+function getFeedbackClassName(
+	feedback: MessageComposerFeedback | null,
+): string {
+	if (feedback !== null && feedback.tone === 'error') {
+		return 'border-red-300/70 bg-red-50/90 text-red-900'
+	}
+	return 'border-emerald-300/70 bg-emerald-50/90 text-emerald-900'
+}
+
+function getSelectedCategoryValue(
+	selectedCategory: MessageCategoryCode | null,
+): MessageCategoryCode | undefined {
+	if (selectedCategory === null) {
+		return undefined
+	}
+	return selectedCategory
+}
+
+function getBodyErrorDescriptionId(
+	bodyError: string | undefined,
+): string | undefined {
+	if (bodyError === undefined || bodyError === '') {
+		return undefined
+	}
+	return 'message-body-error'
+}
+
+function hasBodyError(bodyError: string | undefined): boolean {
+	return bodyError !== undefined && bodyError !== ''
+}
+
+function getSubmitButtonLabel(isSubmitting: boolean): string {
+	if (isSubmitting) {
+		return 'Sending...'
+	}
+	return 'Send message'
 }
 
 export function MessageComposer({
@@ -46,15 +89,18 @@ export function MessageComposer({
 	body,
 	bodyError,
 	isSubmitting,
+	isSubmitDisabled,
+	catalogStatusMessage,
 	feedback,
 	onCategoryChange,
 	onBodyChange,
 	onSubmit,
 }: MessageComposerProps) {
-	const feedbackClassName =
-		feedback?.tone === 'error'
-			? 'border-red-300/70 bg-red-50/90 text-red-900'
-			: 'border-emerald-300/70 bg-emerald-50/90 text-emerald-900'
+	const feedbackClassName = getFeedbackClassName(feedback)
+	const selectValue = getSelectedCategoryValue(selectedCategory)
+	const bodyErrorVisible = hasBodyError(bodyError)
+	const submitButtonLabel = getSubmitButtonLabel(isSubmitting)
+	const submitDisabled = isSubmitting || isSubmitDisabled
 
 	return (
 		<Card className="overflow-visible border-0 bg-white/75 shadow-[0_24px_90px_rgba(75,46,16,0.12)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
@@ -96,7 +142,11 @@ export function MessageComposer({
 							>
 								Category
 							</label>
-							<Select value={selectedCategory} onValueChange={onCategoryChange}>
+							<Select
+								value={selectValue}
+								onValueChange={onCategoryChange}
+								disabled={isSubmitDisabled}
+							>
 								<SelectTrigger
 									id="category-trigger"
 									aria-label="Category"
@@ -132,8 +182,8 @@ export function MessageComposer({
 								rows={7}
 								value={body}
 								onChange={(event) => onBodyChange(event.target.value)}
-								aria-invalid={bodyError ? 'true' : 'false'}
-								aria-describedby={bodyError ? 'message-body-error' : undefined}
+								aria-invalid={bodyErrorVisible}
+								aria-describedby={getBodyErrorDescriptionId(bodyError)}
 								className="min-h-44 rounded-[1.6rem] border-stone-200 bg-white/90 px-4 py-3 text-base leading-7 text-stone-900 shadow-none placeholder:text-stone-400 focus-visible:border-amber-500 focus-visible:ring-amber-500/20"
 								placeholder="Share the update that subscribers should receive."
 							/>
@@ -142,7 +192,7 @@ export function MessageComposer({
 									The audit stream refreshes automatically after a successful
 									dispatch.
 								</span>
-								{bodyError ? (
+								{bodyErrorVisible && (
 									<span
 										className="text-sm font-medium text-red-700"
 										id="message-body-error"
@@ -150,12 +200,19 @@ export function MessageComposer({
 									>
 										{bodyError}
 									</span>
-								) : null}
+								)}
 							</div>
 						</div>
 					</div>
 
-					{feedback ? (
+					{catalogStatusMessage !== null && (
+						<div className="rounded-[1.4rem] border border-amber-300/70 bg-amber-50/90 px-4 py-3 text-amber-950 shadow-sm">
+							<p className="font-semibold">Catalog status</p>
+							<p className="mt-1 text-sm leading-6">{catalogStatusMessage}</p>
+						</div>
+					)}
+
+					{feedback !== null && (
 						<div
 							className={`animate-in fade-in-0 slide-in-from-bottom-2 rounded-[1.4rem] border px-4 py-3 shadow-sm ${feedbackClassName}`}
 							role="status"
@@ -164,7 +221,7 @@ export function MessageComposer({
 							<p className="font-semibold">{feedback.title}</p>
 							<p className="mt-1 text-sm leading-6">{feedback.detail}</p>
 						</div>
-					) : null}
+					)}
 
 					<div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-stone-200/70 bg-stone-100/70 px-4 py-4">
 						<div>
@@ -179,11 +236,11 @@ export function MessageComposer({
 						<Button
 							type="submit"
 							size="lg"
-							disabled={isSubmitting}
+							disabled={submitDisabled}
 							className="h-12 rounded-full bg-stone-950 px-6 text-stone-50 hover:bg-stone-800"
 						>
 							<SendHorizontal className="size-4" />
-							{isSubmitting ? 'Sending...' : 'Send message'}
+							{submitButtonLabel}
 						</Button>
 					</div>
 				</form>

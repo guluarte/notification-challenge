@@ -1,8 +1,6 @@
 {
 	"compilerOptions": {
-		"allowJs": true,
 		"baseUrl": ".",
-		"checkJs": true,
 		"jsx": "react-jsx",
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
@@ -17,5 +15,5 @@
 		"strict": true,
 		"skipLibCheck": true
 	},
-	"include": ["src", "vite.config.js"]
+	"include": ["src", "vite.config.ts", "vitest.config.ts"]
 }

@@ -1,5 +1,10 @@
 """DTO schema package."""
 
+from .catalog import (
+    NotificationCatalogResponseDTO,
+    NotificationCategoryOptionDTO,
+    NotificationChannelOptionDTO,
+)
 from .errors import ErrorResponseDTO, ValidationErrorItemDTO, ValidationErrorResponseDTO
 from .health import HealthResponseDTO, HealthState
 from .logs import (
@@ -20,6 +25,9 @@ __all__ = [
     "NotificationLogListResponseDTO",
     "NotificationLogPageSize",
     "NotificationLogUserDTO",
+    "NotificationCatalogResponseDTO",
+    "NotificationCategoryOptionDTO",
+    "NotificationChannelOptionDTO",
     "ValidationErrorItemDTO",
     "ValidationErrorResponseDTO",
 ]

@@ -4,13 +4,16 @@ Small notification service built for a backend-focused code challenge.
 
 Current status:
 
-- Backend API is implemented with message submission, fan-out dispatch, audit logging, migrations, and seed data.
-- Frontend includes the required submission form and newest-first log history UI from the brief.
+- Backend API is implemented with message submission, fan-out dispatch, audit
+  logging, migrations, and seed data.
+- Frontend includes the required submission form and newest-first log history UI
+  from the brief.
 
 ## Stack
 
 - Backend: FastAPI, SQLAlchemy, Alembic, PostgreSQL
-- Frontend: React + Vite
+- Frontend: React, Vite, TypeScript, Tailwind CSS, shadcn/ui, TanStack Query
+- Infrastructure: Docker, Docker Compose, GitHub Actions
 - Tooling: `uv`, `pytest`, `pyright`, `ruff`, `pnpm`, Biome
 
 ## Features
@@ -20,7 +23,8 @@ Current status:
 - Dispatch through channel strategies
 - Persist one audit row per delivery attempt
 - Protect duplicate submissions with optional `Idempotency-Key` request headers
-- Queue attempts separately from executing them so the same domain flow can run in-process or from a worker later
+- Queue attempts separately from executing them so the same domain flow can run
+  in-process or from a worker later
 - List logs ordered newest to oldest
 
 Supported categories:
@@ -38,8 +42,26 @@ Supported channels:
 ## API
 
 - `GET /v1/health`
+- `GET /v1/catalog`
 - `POST /v1/messages`
 - `GET /v1/logs?limit=10&offset=0`
+
+`GET /v1/catalog` returns the backend-owned catalog used by the UI:
+
+```json
+{
+  "categories": [
+    { "code": "sports", "label": "Sports" },
+    { "code": "finance", "label": "Finance" },
+    { "code": "movies", "label": "Movies" }
+  ],
+  "channels": [
+    { "code": "sms", "label": "SMS" },
+    { "code": "email", "label": "E-Mail" },
+    { "code": "push", "label": "Push Notification" }
+  ]
+}
+```
 
 `POST /v1/messages` accepts an optional `Idempotency-Key` header. The first
 request with a key stores it on the submitted message. A later request with the
@@ -63,15 +85,35 @@ Example request:
 }
 ```
 
-## Quick Start
+## Run With Docker
+
+Prerequisites:
+
+- Docker Engine or Docker Desktop
+- Docker Compose v2
+
+Create local environment files:
 
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
+```
+
+Start the full stack:
+
+```bash
 docker compose up --build
 ```
 
-That single command starts PostgreSQL, applies Alembic migrations, seeds deterministic demo data, and then starts the backend and frontend services.
+The Compose command starts PostgreSQL, applies Alembic migrations, seeds
+deterministic demo data, and then starts the backend and frontend services.
+
+To run the stack in the background:
+
+```bash
+docker compose up --build -d
+docker compose logs -f backend frontend
+```
 
 App URLs:
 
@@ -79,11 +121,31 @@ App URLs:
 - Backend: `http://localhost:8000`
 - OpenAPI: `http://localhost:8000/docs`
 
+Stop the stack:
+
+```bash
+docker compose down
+```
+
+Reset the database volume and reseed from scratch on the next run:
+
+```bash
+docker compose down -v
+```
+
 ## Local Development
+
+Copy the example environment files first if they do not already exist:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
 
 Backend:
 
 ```bash
+docker compose up -d db
 cd backend
 uv sync --group dev
 source .venv/bin/activate
@@ -108,13 +170,14 @@ Backend:
 ```bash
 cd backend
 source .venv/bin/activate
-pyright app/
+pyright
 ruff format --check app tests
 ruff check app tests
 uv run pytest tests/
 ```
 
-`uv run pytest tests/` now enforces a minimum backend coverage threshold of `90%` through `pytest-cov`.
+`uv run pytest tests/` now enforces a minimum backend coverage threshold of
+`90%` through `pytest-cov`.
 
 Frontend:
 
@@ -122,9 +185,9 @@ Frontend:
 cd frontend
 nvm use
 pnpm test
-tsc --noEmit
-pnpm exec biome check . --formatter-enabled=true --linter-enabled=false --assist-enabled=false
-pnpm exec biome lint src
+pnpm typecheck
+pnpm format:check
+pnpm lint
 ```
 
 Bruno E2E:
@@ -135,19 +198,26 @@ cd bruno/notification-api
 bru run --env-file ./environments/local.bru
 ```
 
-The Bruno collection validates the public API from the outside in:
+The Bruno collection validates the public API from the outside in against the
+seeded Docker environment:
 
 - `GET /v1/health`
+- `GET /v1/catalog` backend-owned supported categories and channels
 - `POST /v1/messages` happy path
 - `POST /v1/messages` duplicate replay through `Idempotency-Key`
 - `POST /v1/messages` validation failure for blank bodies
-- `GET /v1/logs?limit=10&offset=0` newest-first audit history after message submission
+- `GET /v1/logs?limit=10&offset=0` newest-first audit history after message
+  submission
 
-Intentionally uncovered areas are limited to framework-generated and forced infrastructure failure branches that are already covered more deterministically by backend unit tests and dependency-override route tests.
+Backend unit tests and dependency-override route tests cover the lower-level
+service, repository, validation, and error-handling paths that are awkward to
+force through the Bruno collection.
 
 ## CI/CD Workflow Local Test
 
-The GitHub Actions workflow can be smoke-tested locally with [`act`](https://github.com/nektos/act). Run these commands from the repository root with Docker running:
+The GitHub Actions workflow can be smoke-tested locally with
+[`act`](https://github.com/nektos/act). Run these commands from the repository
+root with Docker running:
 
 ```bash
 act pull_request -W .github/workflows/ci.yml
@@ -161,7 +231,10 @@ act pull_request -W .github/workflows/ci.yml -j backend-checks
 act pull_request -W .github/workflows/ci.yml -j frontend-checks
 ```
 
-The `publish-images` job only runs for push or manual workflow events on the default branch, `main`, `master`, or tags. When it runs under `act`, the workflow builds the Docker images but skips the GHCR login and push step because `ACT=true`.
+The `publish-images` job only runs for push or manual workflow events on the
+default branch, `main`, `master`, or tags. When it runs under `act`, the
+workflow builds the Docker images but skips the GHCR login and push step because
+`ACT=true`.
 
 ## Database Diagram
 
@@ -234,25 +307,50 @@ erDiagram
 
 ## Schema Notes
 
-`notification_attempts` is the notification attempt audit entity for the system. It stays separate from `messages` so one submitted message can fan out into many independently tracked attempts without losing per-user or per-channel failure details.
+`notification_attempts` is the notification attempt audit entity for the system.
+It stays separate from `messages` so one submitted message can fan out into many
+independently tracked attempts without losing per-user or per-channel failure
+details.
 
-The dispatch flow is intentionally split into two phases: queue pending attempts first, then execute ready attempts. The API still runs both phases in-process today, but the same service boundaries can be reused by a background worker later without rewriting channel orchestration.
+The dispatch flow is intentionally split into two phases: queue pending attempts
+first, then execute ready attempts. The API still runs both phases in-process
+today, but the same service boundaries can be reused by a background worker
+later without rewriting channel orchestration.
 
 Messages can store a nullable `idempotency_key`. A unique index enforces one
 message per key while still allowing clients that do not need replay protection
 to omit the header. Duplicate submissions are replayed from persisted message
 and attempt state instead of dispatching again.
 
-`user_category_subscriptions` and `user_channel_preferences` stay normalized instead of being embedded on `users` as arrays. That keeps category targeting and channel selection independently queryable, indexable, and ready for future changes such as retries, reporting, and more granular preference rules.
+`user_category_subscriptions` and `user_channel_preferences` stay normalized
+instead of being embedded on `users` as arrays. That keeps category targeting
+and channel selection independently queryable, indexable, and ready for future
+changes such as retries, reporting, and more granular preference rules.
 
-The demo data is loaded by `python -m app.seeders.run`, which seeds the normalized operational tables directly. That keeps the runtime schema smaller while still giving local and Docker environments a deterministic, repeatable dataset.
+The demo data is loaded by `python -m app.seeders.run`, which seeds the
+normalized operational tables directly. That keeps the runtime schema smaller
+while still giving local and Docker environments a deterministic, repeatable
+dataset.
 
 ## Tradeoffs and Future Scalability
 
-- Dispatch still runs in-process for the challenge to keep setup and review simple.
-- The dispatcher now separates queueing from execution, so one or more workers can claim and process pending attempts later without changing strategy logic.
-- `notification_attempts` stores pending, processing, and finalization timestamps plus `next_retry_at`, which provides the lifecycle metadata needed for retries and queue-based execution later.
-- Idempotency keys are stored directly on `messages`, which is enough for duplicate POST replay in this challenge. A production version would usually add client ownership, key expiration, request fingerprints, and stronger concurrent-insert handling across horizontally scaled API nodes.
-- `/v1/logs` returns seeded recipient contact details so the demo audit history can verify exactly who received each notification. In production this endpoint would require authentication, role-based access, access auditing, and field masking or redaction for viewers who do not need full PII.
-- Pending-attempt selection uses row-level `SKIP LOCKED` claiming so concurrent dispatch workers do not process the same audit row.
-- Future production extensibility would focus on a real queue migration design, claim leases with explicit expiration, and stronger auth and PII-handling rules for log access.
+- Dispatch still runs in-process for the challenge to keep setup and review
+  simple.
+- The dispatcher now separates queueing from execution, so one or more workers
+  can claim and process pending attempts later without changing strategy logic.
+- `notification_attempts` stores pending, processing, and finalization
+  timestamps plus `next_retry_at`, which provides the lifecycle metadata needed
+  for retries and queue-based execution later.
+- Idempotency keys are stored directly on `messages`, which is enough for
+  duplicate POST replay in this challenge. A production version would usually
+  add client ownership, key expiration, request fingerprints, and stronger
+  concurrent-insert handling across horizontally scaled API nodes.
+- `/v1/logs` returns seeded recipient contact details so the demo audit history
+  can verify exactly who received each notification. In production this endpoint
+  would require authentication, role-based access, access auditing, and field
+  masking or redaction for viewers who do not need full PII.
+- Pending-attempt selection uses row-level `SKIP LOCKED` claiming so concurrent
+  dispatch workers do not process the same audit row.
+- Future production extensibility would focus on a real queue migration design,
+  claim leases with explicit expiration, and stronger auth and PII-handling
+  rules for log access.

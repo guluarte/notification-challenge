@@ -5,6 +5,21 @@ export type NotificationChannelCode = 'sms' | 'email' | 'push'
 export type DeliveryStatus = 'pending' | 'sent' | 'failed'
 export type LogPageSize = 10 | 50 | 100
 
+export interface NotificationCatalogOption<TCode extends string> {
+	code: TCode
+	label: string
+}
+
+export type MessageCategoryOption =
+	NotificationCatalogOption<MessageCategoryCode>
+export type NotificationChannelOption =
+	NotificationCatalogOption<NotificationChannelCode>
+
+export interface NotificationCatalogResponse {
+	categories: MessageCategoryOption[]
+	channels: NotificationChannelOption[]
+}
+
 export interface CreateMessagePayload {
 	category: MessageCategoryCode
 	body: string
@@ -141,10 +156,11 @@ function isErrorResponsePayload(value: unknown): value is ErrorResponsePayload {
 
 async function throwApiError(response: Response): Promise<never> {
 	const payload = await parseResponseBody(response)
-	const detail =
-		isErrorResponsePayload(payload) && typeof payload.detail === 'string'
-			? payload.detail
-			: 'The request could not be completed.'
+	let detail = 'The request could not be completed.'
+	if (isErrorResponsePayload(payload) && typeof payload.detail === 'string') {
+		detail = payload.detail
+	}
+
 	const fieldErrors: Record<string, string> = {}
 
 	if (isErrorResponsePayload(payload) && Array.isArray(payload.errors)) {
@@ -166,6 +182,23 @@ async function readCreateMessageResponse(
 	response: Response,
 ): Promise<CreateMessageResponse> {
 	return response.json()
+}
+
+async function readNotificationCatalogResponse(
+	response: Response,
+): Promise<NotificationCatalogResponse> {
+	return response.json()
+}
+
+export async function getNotificationCatalog(
+	fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<NotificationCatalogResponse> {
+	const response = await fetchImpl(buildApiUrl('/catalog'))
+	if (!response.ok) {
+		await throwApiError(response)
+	}
+
+	return readNotificationCatalogResponse(response)
 }
 
 export async function listNotificationLogs(

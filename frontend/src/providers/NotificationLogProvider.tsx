@@ -61,6 +61,26 @@ function getNotificationLogErrorMessage(error: unknown): string {
 	return 'The log history could not be loaded.'
 }
 
+function getFirstVisibleItem(totalItems: number, offset: number): number {
+	if (totalItems === 0) {
+		return 0
+	}
+	return offset + 1
+}
+
+function getQueryErrorMessage({
+	isError,
+	error,
+}: {
+	isError: boolean
+	error: unknown
+}): string | null {
+	if (!isError) {
+		return null
+	}
+	return getNotificationLogErrorMessage(error)
+}
+
 export function NotificationLogProvider({
 	children,
 }: NotificationLogProviderProps) {
@@ -75,7 +95,7 @@ export function NotificationLogProvider({
 	const items: NotificationLogItem[] = logsQuery.data?.items ?? []
 	const totalItems = logsQuery.data?.total ?? 0
 	const totalPages = Math.max(1, Math.ceil(totalItems / pageSize))
-	const firstVisibleItem = totalItems === 0 ? 0 : offset + 1
+	const firstVisibleItem = getFirstVisibleItem(totalItems, offset)
 	const lastVisibleItem = Math.min(offset + items.length, totalItems)
 	const hasPreviousPage = currentPage > 1
 	const hasNextPage = currentPage < totalPages
@@ -84,9 +104,10 @@ export function NotificationLogProvider({
 	const pendingAttempts = items.filter(
 		(item) => item.status === 'pending',
 	).length
-	const errorMessage = logsQuery.isError
-		? getNotificationLogErrorMessage(logsQuery.error)
-		: null
+	const errorMessage = getQueryErrorMessage({
+		isError: logsQuery.isError,
+		error: logsQuery.error,
+	})
 
 	useEffect(() => {
 		if (currentPage > totalPages) {
