@@ -250,9 +250,9 @@ The demo data is loaded by `python -m app.seeders.run`, which seeds the normaliz
 ## Tradeoffs and Future Scalability
 
 - Dispatch still runs in-process for the challenge to keep setup and review simple.
-- The dispatcher now separates queueing from execution, so a worker can process pending attempts later without changing repository or strategy logic.
+- The dispatcher now separates queueing from execution, so one or more workers can claim and process pending attempts later without changing strategy logic.
 - `notification_attempts` stores pending, processing, and finalization timestamps plus `next_retry_at`, which provides the lifecycle metadata needed for retries and queue-based execution later.
 - Idempotency keys are stored directly on `messages`, which is enough for duplicate POST replay in this challenge. A production version would usually add client ownership, key expiration, request fingerprints, and stronger concurrent-insert handling across horizontally scaled API nodes.
 - `/v1/logs` returns seeded recipient contact details so the demo audit history can verify exactly who received each notification. In production this endpoint would require authentication, role-based access, access auditing, and field masking or redaction for viewers who do not need full PII.
-- Worker-claim semantics such as leases or `SKIP LOCKED` are intentionally left out to keep the implementation small; they would be the next step before running multiple dispatch workers concurrently.
-- Future production extensibility would focus on a real queue migration design, worker locking and leases, and stronger auth and PII-handling rules for log access.
+- Pending-attempt selection uses row-level `SKIP LOCKED` claiming so concurrent dispatch workers do not process the same audit row.
+- Future production extensibility would focus on a real queue migration design, claim leases with explicit expiration, and stronger auth and PII-handling rules for log access.

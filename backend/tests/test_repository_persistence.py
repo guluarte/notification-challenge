@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app.models import Message, NotificationAttempt
@@ -377,7 +378,7 @@ def test_notification_attempt_repository_maps_pending_attempts() -> None:
         "scalars",
         return_value=FakeScalarResult([pending_attempt]),
     ) as scalars_mock:
-        attempts = repository.list_pending_attempts(message_id=12, limit=10)
+        attempts = repository.claim_pending_attempts(message_id=12, limit=10)
 
     assert attempts == [
         PendingNotificationAttempt(
@@ -400,6 +401,10 @@ def test_notification_attempt_repository_maps_pending_attempts() -> None:
         )
     ]
     scalars_mock.assert_called_once()
+    statement = scalars_mock.call_args.args[0]
+    compiled_statement = str(statement.compile(dialect=postgresql.dialect())).upper()
+    assert "FOR UPDATE" in compiled_statement
+    assert "SKIP LOCKED" in compiled_statement
     session.close()
 
 

@@ -47,13 +47,13 @@ class NotificationAttemptRepository(BaseRepository):
         self.session.flush()
         return attempt.id
 
-    def list_pending_attempts(
+    def claim_pending_attempts(
         self,
         *,
         message_id: int | None = None,
         limit: int | None = None,
     ) -> list[PendingNotificationAttempt]:
-        """Return pending attempts that are eligible for execution."""
+        """Claim pending attempts that are eligible for execution."""
 
         ready_at = datetime.now(tz=timezone.utc)
         statement = (
@@ -70,6 +70,7 @@ class NotificationAttemptRepository(BaseRepository):
                 NotificationAttempt.attempted_at.asc(),
                 NotificationAttempt.id.asc(),
             )
+            .with_for_update(of=NotificationAttempt, skip_locked=True)
         )
         if message_id is not None:
             statement = statement.where(NotificationAttempt.message_id == message_id)

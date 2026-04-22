@@ -222,13 +222,13 @@ class DeliveryAttemptRepositoryProtocol(Protocol):
         """Create a pending attempt and return its identifier."""
         ...
 
-    def list_pending_attempts(
+    def claim_pending_attempts(
         self,
         *,
         message_id: int | None = None,
         limit: int | None = None,
     ) -> list[PendingNotificationAttempt]:
-        """Return pending attempts that are ready to be processed."""
+        """Claim pending attempts that are ready to be processed."""
         ...
 
     def mark_processing_started(

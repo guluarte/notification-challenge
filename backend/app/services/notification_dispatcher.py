@@ -76,9 +76,15 @@ class NotificationDispatcherService:
 
         sent = 0
         failed = 0
-        pending_attempts = self.attempt_repository.list_pending_attempts(
+        pending_attempts = self.attempt_repository.claim_pending_attempts(
             message_id=message_id,
             limit=limit,
+        )
+        logger.info(
+            "Claimed pending notification attempts message_id=%s limit=%s count=%s",
+            message_id,
+            limit,
+            len(pending_attempts),
         )
 
         for pending_attempt in pending_attempts:

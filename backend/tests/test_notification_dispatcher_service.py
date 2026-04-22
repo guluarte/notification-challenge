@@ -73,7 +73,7 @@ class FakeDeliveryRepository:
         )
         return attempt_id
 
-    def list_pending_attempts(
+    def claim_pending_attempts(
         self,
         *,
         message_id: int | None = None,
