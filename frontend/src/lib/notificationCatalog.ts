@@ -46,6 +46,13 @@ export function hasCategoryCode(
 	return categories.some((category) => category.code === value)
 }
 
+export function hasChannelCode(
+	channels: NotificationChannelOption[],
+	value: string,
+): value is NotificationChannelCode {
+	return channels.some((channel) => channel.code === value)
+}
+
 export function getCategoryLabel(
 	labelsByCode: Record<MessageCategoryCode, string>,
 	code: MessageCategoryCode,

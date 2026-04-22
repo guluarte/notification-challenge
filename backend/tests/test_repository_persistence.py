@@ -18,6 +18,7 @@ from app.repositories.notification_deliveries import NotificationAttemptReposito
 from app.services.types import (
     MessageDispatchState,
     NotificationLogEntry,
+    NotificationLogFilters,
     PendingNotificationAttempt,
     PersistedMessage,
     ResolvedSubscriber,
@@ -457,7 +458,11 @@ def test_notification_attempt_repository_maps_recent_logs() -> None:
         "execute",
         return_value=FakeTupleResult([row]),
     ) as execute_mock:
-        logs = repository.list_recent(limit=10, offset=20)
+        logs = repository.list_recent(
+            limit=10,
+            offset=20,
+            filters=NotificationLogFilters(),
+        )
 
     assert logs == [
         NotificationLogEntry(
@@ -486,6 +491,41 @@ def test_notification_attempt_repository_maps_recent_logs() -> None:
     session.close()
 
 
+def test_notification_attempt_repository_applies_log_search_filters() -> None:
+    """Log list queries should support exact filters and text search."""
+
+    session = Session()
+    repository = NotificationAttemptRepository(session)
+    filters = NotificationLogFilters(
+        category_code="sports",
+        channel_code="email",
+        status=DeliveryStatus.FAILED,
+        message_id=12,
+        user_id=3,
+        search="Sam Rivera",
+    )
+
+    with patch.object(
+        session,
+        "execute",
+        return_value=FakeTupleResult([]),
+    ) as execute_mock:
+        logs = repository.list_recent(limit=10, offset=0, filters=filters)
+
+    assert logs == []
+    execute_mock.assert_called_once()
+    statement = execute_mock.call_args.args[0]
+    compiled_statement = str(statement.compile(dialect=postgresql.dialect())).upper()
+    assert "NOTIFICATION_ATTEMPTS.CATEGORY_CODE" in compiled_statement
+    assert "NOTIFICATION_ATTEMPTS.CHANNEL_CODE" in compiled_statement
+    assert "NOTIFICATION_ATTEMPTS.STATUS" in compiled_statement
+    assert "NOTIFICATION_ATTEMPTS.MESSAGE_ID" in compiled_statement
+    assert "NOTIFICATION_ATTEMPTS.USER_ID" in compiled_statement
+    assert "ILIKE" in compiled_statement
+    assert "RECIPIENT_SNAPSHOT" in compiled_statement
+    session.close()
+
+
 def test_notification_attempt_repository_counts_logs() -> None:
     """The repository should expose the total audit row count for pagination."""
 
@@ -493,7 +533,9 @@ def test_notification_attempt_repository_counts_logs() -> None:
     repository = NotificationAttemptRepository(session)
 
     with patch.object(session, "scalar", return_value=42) as scalar_mock:
-        total = repository.count_all()
+        total = repository.count_all(
+            filters=NotificationLogFilters(status=DeliveryStatus.SENT)
+        )
 
     assert total == 42
     scalar_mock.assert_called_once()

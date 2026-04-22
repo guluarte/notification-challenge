@@ -12,10 +12,19 @@ import { useNotificationLogs } from '../hooks/useNotificationLogs'
 import {
 	ApiRequestError,
 	type LogPageSize,
+	type NotificationLogFilters,
 	type NotificationLogItem,
 } from '../services/notificationApi'
 
 const LOG_PAGE_SIZE_OPTIONS: LogPageSize[] = [10, 50, 100]
+const EMPTY_LOG_FILTERS: NotificationLogFilters = {
+	category: null,
+	channel: null,
+	status: null,
+	messageId: null,
+	userId: null,
+	search: '',
+}
 
 interface NotificationLogProviderProps {
 	children: ReactNode
@@ -32,6 +41,7 @@ interface NotificationLogContextValue {
 	totalPages: number
 	totalItems: number
 	offset: number
+	filters: NotificationLogFilters
 	firstVisibleItem: number
 	lastVisibleItem: number
 	hasPreviousPage: boolean
@@ -40,6 +50,8 @@ interface NotificationLogContextValue {
 	failedAttempts: number
 	pendingAttempts: number
 	setPageSize: (pageSize: LogPageSize) => void
+	setFilters: (filters: NotificationLogFilters) => void
+	clearFilters: () => void
 	goToPreviousPage: () => void
 	goToNextPage: () => void
 	refresh: () => void
@@ -86,10 +98,13 @@ export function NotificationLogProvider({
 }: NotificationLogProviderProps) {
 	const [pageSize, setPageSizeState] = useState<LogPageSize>(10)
 	const [currentPage, setCurrentPage] = useState(1)
+	const [filters, setFiltersState] =
+		useState<NotificationLogFilters>(EMPTY_LOG_FILTERS)
 	const offset = (currentPage - 1) * pageSize
 	const logsQuery = useNotificationLogs({
 		limit: pageSize,
 		offset,
+		filters,
 	})
 
 	const items: NotificationLogItem[] = logsQuery.data?.items ?? []
@@ -117,6 +132,16 @@ export function NotificationLogProvider({
 
 	const setPageSize = useCallback((nextPageSize: LogPageSize) => {
 		setPageSizeState(nextPageSize)
+		setCurrentPage(1)
+	}, [])
+
+	const setFilters = useCallback((nextFilters: NotificationLogFilters) => {
+		setFiltersState(nextFilters)
+		setCurrentPage(1)
+	}, [])
+
+	const clearFilters = useCallback(() => {
+		setFiltersState(EMPTY_LOG_FILTERS)
 		setCurrentPage(1)
 	}, [])
 
@@ -148,6 +173,7 @@ export function NotificationLogProvider({
 			totalPages,
 			totalItems,
 			offset,
+			filters,
 			firstVisibleItem,
 			lastVisibleItem,
 			hasPreviousPage,
@@ -156,6 +182,8 @@ export function NotificationLogProvider({
 			failedAttempts,
 			pendingAttempts,
 			setPageSize,
+			setFilters,
+			clearFilters,
 			goToPreviousPage,
 			goToNextPage,
 			refresh,
@@ -171,6 +199,7 @@ export function NotificationLogProvider({
 			totalPages,
 			totalItems,
 			offset,
+			filters,
 			firstVisibleItem,
 			lastVisibleItem,
 			hasPreviousPage,
@@ -179,6 +208,8 @@ export function NotificationLogProvider({
 			failedAttempts,
 			pendingAttempts,
 			setPageSize,
+			setFilters,
+			clearFilters,
 			goToPreviousPage,
 			goToNextPage,
 			refresh,

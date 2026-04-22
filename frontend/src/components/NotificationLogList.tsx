@@ -1,4 +1,11 @@
-import { ChevronLeft, ChevronRight, Clock3, RefreshCw } from 'lucide-react'
+import {
+	ChevronLeft,
+	ChevronRight,
+	Clock3,
+	RefreshCw,
+	Search,
+	X,
+} from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +16,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import {
 	Select,
@@ -22,14 +30,27 @@ import {
 	getCategoryLabel,
 	getChannelLabel,
 	getLoadedNotificationCatalog,
+	hasCategoryCode,
+	hasChannelCode,
 	statusLabelsByCode,
 } from '@/lib/notificationCatalog'
+import {
+	ALL_FILTER_VALUE,
+	DELIVERY_STATUS_OPTIONS,
+	formatOptionalNumber,
+	getDeliveryStatus,
+	getFilterSelectValue,
+	getUpdatedFilters,
+	hasActiveFilters,
+	parseLogPageSize,
+	parsePositiveInteger,
+} from '@/lib/notificationLogFilters'
 import { useNotificationCatalog } from '@/hooks/useNotificationCatalog'
 import { useNotificationLogState } from '../providers/NotificationLogProvider'
 import type {
 	DeliveryStatus,
-	LogPageSize,
 	NotificationLogItem,
+	NotificationLogFilters,
 } from '../services/notificationApi'
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -83,19 +104,6 @@ function getProviderReferenceLabel(providerReference: string | null): string {
 		return 'Not provided'
 	}
 	return providerReference
-}
-
-function parseLogPageSize(
-	value: string,
-	pageSizeOptions: LogPageSize[],
-): LogPageSize | null {
-	for (const pageSizeOption of pageSizeOptions) {
-		if (pageSizeOption.toString() === value) {
-			return pageSizeOption
-		}
-	}
-
-	return null
 }
 
 interface LogPaginationBarProps {
@@ -165,8 +173,62 @@ export function NotificationLogList() {
 		pageSize,
 		pageSizeOptions,
 		setPageSize,
+		filters,
+		setFilters,
+		clearFilters,
 		refresh,
 	} = useNotificationLogState()
+	const filtersAreActive = hasActiveFilters(filters)
+
+	function updateFilters(patch: Partial<NotificationLogFilters>): void {
+		setFilters(getUpdatedFilters(filters, patch))
+	}
+
+	function handleCategoryFilterChange(value: string): void {
+		if (value === ALL_FILTER_VALUE) {
+			updateFilters({ category: null })
+			return
+		}
+
+		if (hasCategoryCode(catalog.categories, value)) {
+			updateFilters({ category: value })
+		}
+	}
+
+	function handleChannelFilterChange(value: string): void {
+		if (value === ALL_FILTER_VALUE) {
+			updateFilters({ channel: null })
+			return
+		}
+
+		if (hasChannelCode(catalog.channels, value)) {
+			updateFilters({ channel: value })
+		}
+	}
+
+	function handleStatusFilterChange(value: string): void {
+		if (value === ALL_FILTER_VALUE) {
+			updateFilters({ status: null })
+			return
+		}
+
+		const nextStatus = getDeliveryStatus(value)
+		if (nextStatus !== null) {
+			updateFilters({ status: nextStatus })
+		}
+	}
+
+	function handleSearchChange(value: string): void {
+		updateFilters({ search: value })
+	}
+
+	function handleMessageIdChange(value: string): void {
+		updateFilters({ messageId: parsePositiveInteger(value) })
+	}
+
+	function handleUserIdChange(value: string): void {
+		updateFilters({ userId: parsePositiveInteger(value) })
+	}
 
 	return (
 		<Card className="border-0 bg-white/78 shadow-[0_24px_90px_rgba(75,46,16,0.12)] ring-1 ring-stone-950/8 backdrop-blur xl:rounded-[2rem]">
@@ -183,8 +245,8 @@ export function NotificationLogList() {
 							Notification attempts
 						</CardTitle>
 						<CardDescription className="max-w-2xl text-[0.96rem] leading-7 text-stone-600">
-							Reads are backed by a TanStack Query that keeps the audit history
-							sorted from newest to oldest.
+							Reads are backed by a TanStack Query with server-side filters and
+							newest-first ordering.
 						</CardDescription>
 					</div>
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -234,6 +296,138 @@ export function NotificationLogList() {
 			</CardHeader>
 
 			<CardContent className="grid gap-4">
+				<div className="grid gap-3 rounded-[1.4rem] border border-stone-200/80 bg-white/70 p-4 lg:grid-cols-[minmax(0,1.35fr)_repeat(5,minmax(0,1fr))_auto] lg:items-end">
+					<div className="grid gap-2">
+						<span className="text-xs font-semibold uppercase text-stone-500">
+							Search
+						</span>
+						<div className="relative">
+							<Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-stone-500" />
+							<Input
+								aria-label="Search logs"
+								value={filters.search}
+								onChange={(event) => {
+									handleSearchChange(event.target.value)
+								}}
+								className="h-11 rounded-full border-stone-300 bg-white/90 pl-9 text-stone-900 shadow-none"
+								placeholder="Message, recipient, provider"
+							/>
+						</div>
+					</div>
+					<div className="grid gap-2">
+						<span className="text-xs font-semibold uppercase text-stone-500">
+							Category
+						</span>
+						<Select
+							value={getFilterSelectValue(filters.category)}
+							onValueChange={handleCategoryFilterChange}
+						>
+							<SelectTrigger
+								aria-label="Filter by category"
+								className="h-11 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 shadow-none"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent className="rounded-2xl border-stone-200 bg-white/95 backdrop-blur">
+								<SelectItem value={ALL_FILTER_VALUE}>All categories</SelectItem>
+								{catalog.categories.map((category) => (
+									<SelectItem key={category.code} value={category.code}>
+										{category.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="grid gap-2">
+						<span className="text-xs font-semibold uppercase text-stone-500">
+							Channel
+						</span>
+						<Select
+							value={getFilterSelectValue(filters.channel)}
+							onValueChange={handleChannelFilterChange}
+						>
+							<SelectTrigger
+								aria-label="Filter by channel"
+								className="h-11 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 shadow-none"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent className="rounded-2xl border-stone-200 bg-white/95 backdrop-blur">
+								<SelectItem value={ALL_FILTER_VALUE}>All channels</SelectItem>
+								{catalog.channels.map((channel) => (
+									<SelectItem key={channel.code} value={channel.code}>
+										{channel.label}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="grid gap-2">
+						<span className="text-xs font-semibold uppercase text-stone-500">
+							Status
+						</span>
+						<Select
+							value={getFilterSelectValue(filters.status)}
+							onValueChange={handleStatusFilterChange}
+						>
+							<SelectTrigger
+								aria-label="Filter by status"
+								className="h-11 rounded-full border-stone-300 bg-white/90 px-3 text-stone-900 shadow-none"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent className="rounded-2xl border-stone-200 bg-white/95 backdrop-blur">
+								<SelectItem value={ALL_FILTER_VALUE}>All statuses</SelectItem>
+								{DELIVERY_STATUS_OPTIONS.map((status) => (
+									<SelectItem key={status} value={status}>
+										{statusLabelsByCode[status]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="grid gap-2">
+						<span className="text-xs font-semibold uppercase text-stone-500">
+							Message ID
+						</span>
+						<Input
+							aria-label="Filter by message id"
+							type="number"
+							min={1}
+							value={formatOptionalNumber(filters.messageId)}
+							onChange={(event) => {
+								handleMessageIdChange(event.target.value)
+							}}
+							className="h-11 rounded-full border-stone-300 bg-white/90 text-stone-900 shadow-none"
+						/>
+					</div>
+					<div className="grid gap-2">
+						<span className="text-xs font-semibold uppercase text-stone-500">
+							User ID
+						</span>
+						<Input
+							aria-label="Filter by user id"
+							type="number"
+							min={1}
+							value={formatOptionalNumber(filters.userId)}
+							onChange={(event) => {
+								handleUserIdChange(event.target.value)
+							}}
+							className="h-11 rounded-full border-stone-300 bg-white/90 text-stone-900 shadow-none"
+						/>
+					</div>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={clearFilters}
+						disabled={!filtersAreActive}
+						className="h-11 rounded-full border-stone-300 bg-white/90 px-4 text-stone-900 hover:bg-stone-100"
+					>
+						<X className="size-4" />
+						Clear
+					</Button>
+				</div>
+
 				<LogPaginationBar placement="top" />
 
 				{errorMessage !== null && (

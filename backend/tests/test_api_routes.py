@@ -28,6 +28,7 @@ from app.services.types import (
     NotificationCatalog,
     NotificationCatalogItem,
     NotificationLogEntry,
+    NotificationLogFilters,
     NotificationLogPage,
 )
 
@@ -151,10 +152,17 @@ class FakeNotificationLogService:
     ) -> None:
         self.entries = entries
         self.error = error
-        self.calls: list[tuple[int, int]] = []
+        self.calls: list[tuple[int, int, NotificationLogFilters]] = []
 
-    def list_logs(self, *, limit: int = 10, offset: int = 0) -> NotificationLogPage:
-        self.calls.append((limit, offset))
+    def list_logs(
+        self,
+        *,
+        limit: int = 10,
+        offset: int = 0,
+        filters: NotificationLogFilters | None = None,
+    ) -> NotificationLogPage:
+        normalized_filters = filters or NotificationLogFilters()
+        self.calls.append((limit, offset, normalized_filters))
         if self.error is not None:
             raise self.error
         return NotificationLogPage(
@@ -574,7 +582,7 @@ def test_logs_route_returns_log_items() -> None:
         "limit": 10,
         "offset": 0,
     }
-    assert service.calls == [(10, 0)]
+    assert service.calls == [(10, 0, NotificationLogFilters())]
 
 
 def test_logs_route_accepts_pagination_query_parameters() -> None:
@@ -595,7 +603,44 @@ def test_logs_route_accepts_pagination_query_parameters() -> None:
 
     assert status_code == 200
     assert payload == {"items": [], "total": 25, "limit": 50, "offset": 100}
-    assert service.calls == [(50, 100)]
+    assert service.calls == [(50, 100, NotificationLogFilters())]
+
+
+def test_logs_route_accepts_search_filter_query_parameters() -> None:
+    """The logs route should pass search filters through to the service layer."""
+
+    service = FakeNotificationLogService(entries=[])
+
+    status_code, payload = asyncio.run(
+        _call_app(
+            method="GET",
+            path="/v1/logs",
+            query_string=(
+                "limit=50&offset=100&category=sports&channel=email&"
+                "status=failed&message_id=4&user_id=1&q=%20Alex%20"
+            ),
+            app_overrides={
+                get_notification_log_service: _log_service_override(service)
+            },
+        )
+    )
+
+    assert status_code == 200
+    assert payload == {"items": [], "total": 25, "limit": 50, "offset": 100}
+    assert service.calls == [
+        (
+            50,
+            100,
+            NotificationLogFilters(
+                category_code="sports",
+                channel_code="email",
+                status=DeliveryStatus.FAILED,
+                message_id=4,
+                user_id=1,
+                search="Alex",
+            ),
+        )
+    ]
 
 
 def test_logs_route_maps_infrastructure_errors() -> None:

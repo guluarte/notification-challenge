@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.exceptions import InfrastructureError
 from app.models.enums import DeliveryStatus
 from app.services.notification_log_service import NotificationLogService
-from app.services.types import NotificationLogEntry
+from app.services.types import NotificationLogEntry, NotificationLogFilters
 
 
 class FakeNotificationAttemptRepository:
@@ -17,26 +17,39 @@ class FakeNotificationAttemptRepository:
 
     def __init__(self, entries: list[NotificationLogEntry]) -> None:
         self.entries = entries
-        self.list_calls: list[tuple[int, int]] = []
-        self.count_calls = 0
+        self.list_calls: list[tuple[int, int, NotificationLogFilters]] = []
+        self.count_calls: list[NotificationLogFilters] = []
 
-    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
-        self.list_calls.append((limit, offset))
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: NotificationLogFilters,
+    ) -> list[NotificationLogEntry]:
+        self.list_calls.append((limit, offset, filters))
         return self.entries
 
-    def count_all(self) -> int:
-        self.count_calls += 1
+    def count_all(self, *, filters: NotificationLogFilters) -> int:
+        self.count_calls.append(filters)
         return len(self.entries)
 
 
 class FailingNotificationAttemptRepository:
     """Attempt repository double that simulates database failures."""
 
-    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
-        del limit, offset
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: NotificationLogFilters,
+    ) -> list[NotificationLogEntry]:
+        del limit, offset, filters
         raise SQLAlchemyError("database unavailable")
 
-    def count_all(self) -> int:
+    def count_all(self, *, filters: NotificationLogFilters) -> int:
+        del filters
         raise AssertionError("count_all should not run after list_recent fails")
 
 
@@ -75,8 +88,30 @@ def test_notification_log_service_returns_repository_results() -> None:
     assert result.total == 1
     assert result.limit == 50
     assert result.offset == 100
-    assert repository.list_calls == [(50, 100)]
-    assert repository.count_calls == 1
+    assert repository.list_calls == [(50, 100, NotificationLogFilters())]
+    assert repository.count_calls == [NotificationLogFilters()]
+
+
+def test_notification_log_service_passes_search_filters_to_repository() -> None:
+    """The log service should apply one filter set to rows and total count."""
+
+    filters = NotificationLogFilters(
+        category_code="sports",
+        channel_code="email",
+        status=DeliveryStatus.FAILED,
+        message_id=7,
+        user_id=2,
+        search="provider outage",
+    )
+    repository = FakeNotificationAttemptRepository(entries=[])
+    service = NotificationLogService(attempt_repository=repository)
+
+    result = service.list_logs(limit=10, offset=20, filters=filters)
+
+    assert result.items == []
+    assert result.total == 0
+    assert repository.list_calls == [(10, 20, filters)]
+    assert repository.count_calls == [filters]
 
 
 def test_notification_log_service_wraps_database_failures() -> None:

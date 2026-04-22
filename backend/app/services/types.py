@@ -122,6 +122,18 @@ class NotificationLogEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationLogFilters:
+    """Optional filters applied to audit-log searches."""
+
+    category_code: str | None = None
+    channel_code: str | None = None
+    status: DeliveryStatus | None = None
+    message_id: int | None = None
+    user_id: int | None = None
+    search: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class NotificationLogPage:
     """Paginated audit-log rows returned by the service layer."""
 
@@ -349,10 +361,16 @@ class NotificationDispatcherProtocol(Protocol):
 class NotificationLogRepositoryProtocol(Protocol):
     """Repository contract for audit log listing."""
 
-    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: NotificationLogFilters,
+    ) -> list[NotificationLogEntry]:
         """Return recent notification logs."""
         ...
 
-    def count_all(self) -> int:
+    def count_all(self, *, filters: NotificationLogFilters) -> int:
         """Return the total number of notification logs."""
         ...

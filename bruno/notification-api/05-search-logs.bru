@@ -1,0 +1,40 @@
+meta {
+  name: Search Notification Logs
+  type: http
+  seq: 7
+  tags: [
+    smoke
+    e2e
+  ]
+}
+
+get {
+  url: {{baseUrl}}/v1/logs?limit=10&offset=0&category=sports&status=sent&message_id={{messageId}}&q=Bruno
+  body: none
+  auth: none
+}
+
+headers {
+  content-type: application/json
+}
+
+tests {
+  test("logs can be searched by category, status, and message text", function () {
+    const payload = res.getBody();
+    const messageId = bru.getVar("messageId");
+    const messageBody = bru.getVar("messageBody");
+    const createdItems = payload.items.filter(item => item.message_id === messageId);
+
+    expect(res.getStatus()).to.equal(200);
+    expect(payload.items).to.be.an("array");
+    expect(payload.limit).to.equal(10);
+    expect(payload.offset).to.equal(0);
+    expect(createdItems.length).to.equal(5);
+
+    createdItems.forEach(item => {
+      expect(item.category).to.equal("sports");
+      expect(item.status).to.equal("sent");
+      expect(item.body).to.equal(messageBody);
+    });
+  });
+}

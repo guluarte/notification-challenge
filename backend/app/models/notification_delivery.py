@@ -48,6 +48,8 @@ class NotificationAttempt(Base):
             name="uq_notification_attempts_attempt",
         ),
         Index("ix_notification_attempts_attempted_at", "attempted_at"),
+        Index("ix_notification_attempts_category_code", "category_code"),
+        Index("ix_notification_attempts_channel_code", "channel_code"),
         Index("ix_notification_attempts_next_retry_at", "next_retry_at"),
         Index("ix_notification_attempts_status", "status"),
         Index("ix_notification_attempts_user_id", "user_id"),

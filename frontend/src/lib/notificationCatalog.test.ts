@@ -7,6 +7,7 @@ import {
 	getChannelLabel,
 	getFirstCategoryCode,
 	getLoadedNotificationCatalog,
+	hasChannelCode,
 	hasCategoryCode,
 	statusLabelsByCode,
 	type MessageCategoryOption,
@@ -57,6 +58,11 @@ describe('notification catalog helpers', () => {
 		expect(getFirstCategoryCode([])).toBeNull()
 		expect(hasCategoryCode(categories, 'finance')).toBe(true)
 		expect(hasCategoryCode(categories, 'weather')).toBe(false)
+	})
+
+	it('validates channel codes from loaded options', () => {
+		expect(hasChannelCode(channels, 'email')).toBe(true)
+		expect(hasChannelCode(channels, 'push')).toBe(false)
 	})
 
 	it('exposes user-facing delivery status labels', () => {

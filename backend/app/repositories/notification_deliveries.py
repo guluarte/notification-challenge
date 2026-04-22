@@ -6,11 +6,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 from app.models import Message, NotificationAttempt
 from app.models.enums import DeliveryStatus
 from app.services.types import (
     MessageDispatchState,
     NotificationLogEntry,
+    NotificationLogFilters,
     PendingNotificationAttempt,
     PersistedMessage,
     ResolvedSubscriber,
@@ -170,9 +172,16 @@ class NotificationAttemptRepository(BaseRepository):
         attempt.processed_at = processed_at
         self.session.flush()
 
-    def list_recent(self, *, limit: int, offset: int) -> list[NotificationLogEntry]:
+    def list_recent(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        filters: NotificationLogFilters,
+    ) -> list[NotificationLogEntry]:
         """Return notification attempts sorted from newest to oldest."""
 
+        filter_conditions = self._log_filter_conditions(filters)
         statement = (
             select(
                 NotificationAttempt.id,
@@ -193,6 +202,7 @@ class NotificationAttemptRepository(BaseRepository):
                 NotificationAttempt.failure_reason,
                 NotificationAttempt.provider_reference,
             )
+            .where(*filter_conditions)
             .order_by(
                 NotificationAttempt.attempted_at.desc(),
                 NotificationAttempt.id.desc(),
@@ -241,11 +251,14 @@ class NotificationAttemptRepository(BaseRepository):
             ) in self.session.execute(statement).tuples()
         ]
 
-    def count_all(self) -> int:
+    def count_all(self, *, filters: NotificationLogFilters) -> int:
         """Return the total number of notification attempt rows."""
 
+        filter_conditions = self._log_filter_conditions(filters)
         total = self.session.scalar(
-            select(func.count(NotificationAttempt.id)).select_from(NotificationAttempt)
+            select(func.count(NotificationAttempt.id))
+            .select_from(NotificationAttempt)
+            .where(*filter_conditions)
         )
         return int(total or 0)
 
@@ -290,6 +303,64 @@ class NotificationAttemptRepository(BaseRepository):
             "email": subscriber.email,
             "phone_number": subscriber.phone_number,
         }
+
+    @staticmethod
+    def _escape_like_term(term: str) -> str:
+        """Escape wildcard characters for user-supplied search terms."""
+
+        return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    @classmethod
+    def _log_filter_conditions(
+        cls,
+        filters: NotificationLogFilters,
+    ) -> list[ColumnElement[bool]]:
+        """Build reusable SQL conditions for log list and count queries."""
+
+        conditions: list[ColumnElement[bool]] = []
+        if filters.category_code is not None:
+            conditions.append(
+                NotificationAttempt.category_code == filters.category_code
+            )
+        if filters.channel_code is not None:
+            conditions.append(NotificationAttempt.channel_code == filters.channel_code)
+        if filters.status is not None:
+            conditions.append(NotificationAttempt.status == filters.status.value)
+        if filters.message_id is not None:
+            conditions.append(NotificationAttempt.message_id == filters.message_id)
+        if filters.user_id is not None:
+            conditions.append(NotificationAttempt.user_id == filters.user_id)
+        if filters.search is not None:
+            search_pattern = f"%{cls._escape_like_term(filters.search)}%"
+            conditions.append(
+                or_(
+                    NotificationAttempt.message_body.ilike(
+                        search_pattern,
+                        escape="\\",
+                    ),
+                    NotificationAttempt.failure_reason.ilike(
+                        search_pattern,
+                        escape="\\",
+                    ),
+                    NotificationAttempt.provider_reference.ilike(
+                        search_pattern,
+                        escape="\\",
+                    ),
+                    NotificationAttempt.recipient_snapshot["name"].astext.ilike(
+                        search_pattern,
+                        escape="\\",
+                    ),
+                    NotificationAttempt.recipient_snapshot["email"].astext.ilike(
+                        search_pattern,
+                        escape="\\",
+                    ),
+                    NotificationAttempt.recipient_snapshot["phone_number"].astext.ilike(
+                        search_pattern,
+                        escape="\\",
+                    ),
+                )
+            )
+        return conditions
 
     @staticmethod
     def _to_pending_attempt(

@@ -7,7 +7,11 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from app.api.dependencies import NotificationLogServiceDep
-from app.models.enums import MessageCategoryCode, NotificationChannelCode
+from app.models.enums import (
+    DeliveryStatus,
+    MessageCategoryCode,
+    NotificationChannelCode,
+)
 from app.schemas.dtos import (
     ErrorResponseDTO,
     NotificationLogListItemDTO,
@@ -15,7 +19,7 @@ from app.schemas.dtos import (
     NotificationLogPageSize,
     NotificationLogUserDTO,
 )
-from app.services.types import NotificationLogEntry
+from app.services.types import NotificationLogEntry, NotificationLogFilters
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -48,6 +52,18 @@ def _to_log_list_item(entry: NotificationLogEntry) -> NotificationLogListItemDTO
     )
 
 
+def _normalize_search_term(search: str | None) -> str | None:
+    """Return a trimmed search term or no filter for blank input."""
+
+    if search is None:
+        return None
+
+    normalized = search.strip()
+    if normalized == "":
+        return None
+    return normalized
+
+
 @router.get(
     "",
     response_model=NotificationLogListResponseDTO,
@@ -64,10 +80,50 @@ def list_logs(
         int,
         Query(ge=0, description="Number of newest log rows to skip."),
     ] = 0,
+    category: Annotated[
+        MessageCategoryCode | None,
+        Query(description="Only return attempts for this message category."),
+    ] = None,
+    channel: Annotated[
+        NotificationChannelCode | None,
+        Query(description="Only return attempts sent through this channel."),
+    ] = None,
+    status: Annotated[
+        DeliveryStatus | None,
+        Query(description="Only return attempts with this delivery status."),
+    ] = None,
+    message_id: Annotated[
+        int | None,
+        Query(gt=0, description="Only return attempts for this message id."),
+    ] = None,
+    user_id: Annotated[
+        int | None,
+        Query(gt=0, description="Only return attempts for this recipient user id."),
+    ] = None,
+    search: Annotated[
+        str | None,
+        Query(
+            alias="q",
+            max_length=200,
+            description="Case-insensitive search across message, recipient, provider, and failure text.",
+        ),
+    ] = None,
 ) -> NotificationLogListResponseDTO:
     """Return notification attempt logs ordered from newest to oldest."""
 
-    page = log_service.list_logs(limit=limit.value, offset=offset)
+    filters = NotificationLogFilters(
+        category_code=category.value if category is not None else None,
+        channel_code=channel.value if channel is not None else None,
+        status=status,
+        message_id=message_id,
+        user_id=user_id,
+        search=_normalize_search_term(search),
+    )
+    page = log_service.list_logs(
+        limit=limit.value,
+        offset=offset,
+        filters=filters,
+    )
     items = [_to_log_list_item(entry) for entry in page.items]
     return NotificationLogListResponseDTO(
         items=items,

@@ -26,6 +26,8 @@ Current status:
 - Queue attempts separately from executing them so the same domain flow can run
   in-process or from a worker later
 - List logs ordered newest to oldest
+- Search and filter logs by category, channel, status, message id, recipient
+  user id, and free-text audit content
 
 Supported categories:
 
@@ -45,6 +47,7 @@ Supported channels:
 - `GET /v1/catalog`
 - `POST /v1/messages`
 - `GET /v1/logs?limit=10&offset=0`
+- `GET /v1/logs?category=sports&channel=email&status=sent&message_id=1&user_id=3&q=Alex`
 
 `GET /v1/catalog` returns the backend-owned catalog used by the UI:
 
@@ -74,7 +77,10 @@ log item exposes the message details, channel, status, timestamps, errors when
 present, and a `user` object with the recipient id, name, email, and phone
 number captured at dispatch time. Log history is paginated server-side with page
 sizes of `10`, `50`, or `100`, and responses include `items`, `total`, `limit`,
-and `offset`.
+and `offset`. Optional filters are `category`, `channel`, `status`,
+`message_id`, `user_id`, and `q`. The `q` parameter performs a
+case-insensitive search across message text, recipient snapshot fields,
+provider references, and failure reasons.
 
 Example request:
 
@@ -208,6 +214,8 @@ seeded Docker environment:
 - `POST /v1/messages` validation failure for blank bodies
 - `GET /v1/logs?limit=10&offset=0` newest-first audit history after message
   submission
+- `GET /v1/logs?...&message_id=<id>&q=Bruno` filtered audit search for the
+  created message
 
 Backend unit tests and dependency-override route tests cover the lower-level
 service, repository, validation, and error-handling paths that are awkward to
@@ -341,6 +349,10 @@ dataset.
 - `notification_attempts` stores pending, processing, and finalization
   timestamps plus `next_retry_at`, which provides the lifecycle metadata needed
   for retries and queue-based execution later.
+- Common log filters are backed by indexes on attempt timestamp, status,
+  message id, user id, category, and channel. The free-text `q` search is kept
+  simple for the challenge; a production version could evolve it to PostgreSQL
+  full-text or trigram indexes if audit volume justified it.
 - Idempotency keys are stored directly on `messages`, which is enough for
   duplicate POST replay in this challenge. A production version would usually
   add client ownership, key expiration, request fingerprints, and stronger

@@ -63,9 +63,19 @@ export interface NotificationLogItem {
 	provider_reference: string | null
 }
 
+export interface NotificationLogFilters {
+	category: MessageCategoryCode | null
+	channel: NotificationChannelCode | null
+	status: DeliveryStatus | null
+	messageId: number | null
+	userId: number | null
+	search: string
+}
+
 export interface NotificationLogListParams {
 	limit: LogPageSize
 	offset: number
+	filters: NotificationLogFilters
 }
 
 export interface NotificationLogListResponse {
@@ -209,6 +219,25 @@ export async function listNotificationLogs(
 		limit: params.limit.toString(),
 		offset: params.offset.toString(),
 	})
+	if (params.filters.category !== null) {
+		searchParams.set('category', params.filters.category)
+	}
+	if (params.filters.channel !== null) {
+		searchParams.set('channel', params.filters.channel)
+	}
+	if (params.filters.status !== null) {
+		searchParams.set('status', params.filters.status)
+	}
+	if (params.filters.messageId !== null) {
+		searchParams.set('message_id', params.filters.messageId.toString())
+	}
+	if (params.filters.userId !== null) {
+		searchParams.set('user_id', params.filters.userId.toString())
+	}
+	const normalizedSearch = params.filters.search.trim()
+	if (normalizedSearch !== '') {
+		searchParams.set('q', normalizedSearch)
+	}
 	const response = await fetchImpl(
 		buildApiUrl(`/logs?${searchParams.toString()}`),
 	)

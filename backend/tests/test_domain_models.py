@@ -9,6 +9,7 @@ from app.models.enums import (
     NOTIFICATION_CHANNEL_CODES,
     NOTIFICATION_CHANNEL_LABELS_BY_CODE,
 )
+from app.models.notification_delivery import NotificationAttempt
 from app.models.user_category_subscription import UserCategorySubscription
 from app.models.user_channel_preference import UserChannelPreference
 
@@ -89,3 +90,20 @@ def test_subscription_tables_keep_lookup_indexes_declared_in_orm() -> None:
 
     assert "ix_user_category_subscriptions_category_code" in category_index_names
     assert "ix_user_channel_preferences_channel_code" in channel_index_names
+
+
+def test_notification_attempt_table_keeps_filter_indexes_declared_in_orm() -> None:
+    attempt_table = NotificationAttempt.__table__
+
+    assert isinstance(attempt_table, Table)
+
+    attempt_index_names = {
+        index_name
+        for index in attempt_table.indexes
+        if (index_name := index.name) is not None
+    }
+
+    assert "ix_notification_attempts_category_code" in attempt_index_names
+    assert "ix_notification_attempts_channel_code" in attempt_index_names
+    assert "ix_notification_attempts_status" in attempt_index_names
+    assert "ix_notification_attempts_attempted_at" in attempt_index_names

@@ -2,6 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createQueryClient } from '../services/queryClient'
+import { useNotificationLogState } from '../providers/NotificationLogProvider'
 import { SetupPage } from './SetupPage'
 
 afterEach(() => {
@@ -17,6 +18,11 @@ function renderSetupPage() {
 			<SetupPage />
 		</QueryClientProvider>,
 	)
+}
+
+function OrphanNotificationLogConsumer() {
+	useNotificationLogState()
+	return null
 }
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -40,6 +46,32 @@ const catalogPayload = {
 		{ code: 'email', label: 'E-Mail' },
 		{ code: 'push', label: 'Push Notification' },
 	],
+}
+
+function buildLogItem(attemptId: number) {
+	return {
+		attempt_id: attemptId,
+		message_id: 4,
+		category: 'sports',
+		body: `Message ${attemptId}`,
+		user: {
+			id: 1,
+			name: 'Alex Morgan',
+			email: 'alex.morgan@example.com',
+			phone_number: '+15550000001',
+		},
+		channel: 'email',
+		status: 'sent',
+		attempt_number: 1,
+		attempted_at: '2026-04-20T17:05:00Z',
+		processing_started_at: '2026-04-20T17:05:01Z',
+		processed_at: '2026-04-20T17:05:02Z',
+		delivered_at: '2026-04-20T17:05:02Z',
+		last_error_at: null,
+		next_retry_at: null,
+		failure_reason: null,
+		provider_reference: `email-4-${attemptId}`,
+	}
 }
 
 function isRequestInit(value: unknown): value is RequestInit {
@@ -73,6 +105,14 @@ function getIdempotencyKeyFromCall(call: ReadonlyArray<unknown>): string {
 }
 
 describe('SetupPage', () => {
+	it('guards notification log state usage outside the provider', () => {
+		expect(() => {
+			render(<OrphanNotificationLogConsumer />)
+		}).toThrow(
+			'useNotificationLogState must be used within NotificationLogProvider.',
+		)
+	})
+
 	it('renders the configured application, pagination controls, and audit items', async () => {
 		vi.stubEnv('VITE_APP_NAME', 'Notification Control Center')
 		vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:9000/v1')
@@ -139,6 +179,24 @@ describe('SetupPage', () => {
 		expect(screen.getByRole('button', { name: 'Refresh logs' })).toHaveClass(
 			'cursor-pointer',
 		)
+		expect(
+			screen.getByRole('textbox', { name: 'Search logs' }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole('combobox', { name: 'Filter by category' }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole('combobox', { name: 'Filter by channel' }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole('combobox', { name: 'Filter by status' }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole('spinbutton', { name: 'Filter by message id' }),
+		).toBeInTheDocument()
+		expect(
+			screen.getByRole('spinbutton', { name: 'Filter by user id' }),
+		).toBeInTheDocument()
 		expect(screen.getByRole('button', { name: 'Send message' })).toHaveClass(
 			'cursor-pointer',
 		)
@@ -199,6 +257,113 @@ describe('SetupPage', () => {
 			screen.getByText('Message body must not be blank.'),
 		).toBeInTheDocument()
 		expect(fetchMock).toHaveBeenCalledTimes(2)
+	})
+
+	it('fetches adjacent audit log pages from pagination controls', async () => {
+		const logsPayload = {
+			items: Array.from({ length: 10 }, (_value, index) => {
+				return buildLogItem(index + 1)
+			}),
+			total: 25,
+			limit: 10,
+			offset: 0,
+		}
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:8000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			return Promise.resolve(jsonResponse(logsPayload))
+		})
+		vi.stubGlobal('fetch', fetchMock)
+
+		renderSetupPage()
+
+		expect(await screen.findAllByText('Page 1 of 3')).toHaveLength(2)
+
+		fireEvent.click(screen.getAllByRole('button', { name: /Next/ })[0])
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				'http://localhost:8000/v1/logs?limit=10&offset=10',
+			)
+		})
+
+		fireEvent.click(screen.getAllByRole('button', { name: /Previous/ })[0])
+		await waitFor(() => {
+			const firstPageCalls = fetchMock.mock.calls.filter((call) => {
+				return (
+					getRequestUrl(call[0]) ===
+					'http://localhost:8000/v1/logs?limit=10&offset=0'
+				)
+			})
+			expect(firstPageCalls.length).toBeGreaterThan(1)
+		})
+	})
+
+	it('runs log searches from toolbar filters', async () => {
+		const logsPayload = {
+			items: [],
+			total: 0,
+			limit: 10,
+			offset: 0,
+		}
+		const fetchMock = vi.fn((input: RequestInfo | URL) => {
+			const url = getRequestUrl(input)
+			if (url === 'http://localhost:8000/v1/catalog') {
+				return Promise.resolve(jsonResponse(catalogPayload))
+			}
+			return Promise.resolve(jsonResponse(logsPayload))
+		})
+		vi.stubGlobal('fetch', fetchMock)
+
+		renderSetupPage()
+
+		await screen.findByText('No delivery attempts yet')
+
+		fireEvent.change(screen.getByRole('textbox', { name: 'Search logs' }), {
+			target: { value: 'Alex' },
+		})
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				'http://localhost:8000/v1/logs?limit=10&offset=0&q=Alex',
+			)
+		})
+
+		fireEvent.change(
+			screen.getByRole('spinbutton', { name: 'Filter by message id' }),
+			{
+				target: { value: '4' },
+			},
+		)
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				'http://localhost:8000/v1/logs?limit=10&offset=0&message_id=4&q=Alex',
+			)
+		})
+
+		fireEvent.change(
+			screen.getByRole('spinbutton', { name: 'Filter by user id' }),
+			{
+				target: { value: '1' },
+			},
+		)
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				'http://localhost:8000/v1/logs?limit=10&offset=0&message_id=4&user_id=1&q=Alex',
+			)
+		})
+
+		const baseLogUrl = 'http://localhost:8000/v1/logs?limit=10&offset=0'
+		const baseLogCallsBeforeClear = fetchMock.mock.calls.filter((call) => {
+			return getRequestUrl(call[0]) === baseLogUrl
+		}).length
+		fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+		await waitFor(() => {
+			const baseLogCallsAfterClear = fetchMock.mock.calls.filter((call) => {
+				return getRequestUrl(call[0]) === baseLogUrl
+			}).length
+			expect(baseLogCallsAfterClear).toBeGreaterThan(baseLogCallsBeforeClear)
+		})
 	})
 
 	it('submits a message through a mutation and refreshes the logs query', async () => {
