@@ -41,6 +41,51 @@ Supported channels:
 - `email`
 - `push`
 
+## Main Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Frontend UI
+    participant API as POST /v1/messages
+    participant MessageService
+    participant Resolver as SubscriberResolverService
+    participant Dispatcher as NotificationDispatcherService
+    participant Attempts as NotificationAttemptRepository
+    participant Factory as StrategyFactory
+    participant Strategy as ChannelStrategy
+    participant Logs as GET /v1/logs
+
+    User->>UI: Select category and submit message body
+    UI->>API: POST category, body, optional Idempotency-Key
+    API->>MessageService: create_message(category, body, key)
+    MessageService->>MessageService: Validate catalog and idempotency
+    MessageService->>MessageService: Persist message
+    MessageService->>Resolver: Resolve subscribed users and channels
+    Resolver-->>MessageService: Eligible subscribers
+    MessageService->>Dispatcher: prepare_dispatch(message, subscribers)
+    Dispatcher->>Attempts: Create pending attempt per user/channel
+    MessageService->>Dispatcher: dispatch_pending_attempts(message_id)
+    Dispatcher->>Attempts: Claim pending attempts
+    loop Each pending attempt
+        Dispatcher->>Attempts: Mark processing started
+        Dispatcher->>Factory: Resolve strategy by channel code
+        Factory-->>Dispatcher: SMS, email, or push strategy
+        Dispatcher->>Strategy: send(subscriber, message)
+        alt Send succeeds
+            Strategy-->>Dispatcher: Provider reference and delivered timestamp
+            Dispatcher->>Attempts: Mark sent
+        else Send fails
+            Strategy-->>Dispatcher: Error
+            Dispatcher->>Attempts: Mark failed with failure reason
+        end
+    end
+    MessageService-->>API: Dispatch summary
+    API-->>UI: message_id, users, attempts, sent, failed
+    UI->>Logs: Refresh newest-first audit history
+    Logs-->>UI: Delivery attempts with recipient snapshots
+```
+
 ## API
 
 - `GET /v1/health`
